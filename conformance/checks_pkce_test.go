@@ -25,7 +25,7 @@ func TestPKCE_AdvertiseS256(t *testing.T) {
 }
 
 func TestPKCE_AdvertiseS256_Fail(t *testing.T) {
-	// A target that advertises no S256 at all fails.
+	// a target that advertises no S256 at all fails.
 	tgt := &Target{}
 	tgt.Discovered.Issuer = "https://issuer.example"
 	tgt.Discovered.CodeChallengeMethodsSupported = []string{"plain"}

@@ -28,7 +28,7 @@ func registerPKCE(r *Registry) {
 				return t.Discovered.Issuer != "" && t.Creds.AuthCodeAvailable
 			},
 			Run: func(t *Target) Result {
-				// With an auth_code-obtained token available, attempt a token
+				// with an auth_code-obtained token available, attempt a token
 				// request using a plain code_challenge_method; a conformant AS
 				// must reject it.
 				form := probe.FormString(

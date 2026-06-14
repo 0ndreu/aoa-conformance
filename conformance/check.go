@@ -88,34 +88,36 @@ type Result struct {
 
 // Creds carries credentials supplied by the operator. Tier gating reads it.
 type Creds struct {
-	ClientID     string
-	ClientSecret string
-	UsePostAuth  bool   // client_secret_post vs client_secret_basic
-	PrivateKey   []byte // RFC 7523 private_key_jwt (PEM/JWK); optional
+	ClientID      string
+	ClientSecret  string
+	UsePostAuth   bool   // client_secret_post vs client_secret_basic
+	PrivateKey    []byte // RFC 7523 private_key_jwt (PEM/JWK); optional
 	PrivateKeyAlg string
-	SubjectToken string // supplied Tier-2 user token
+	SubjectToken  string // supplied Tier-2 user token
 
 	AuthCodeAvailable bool // true after an interactive auth_code flow; gates pkce.enforce.reject_plain
 	PresentEnabled    bool // set by CLI --present; gates the smoke check
 }
 
-func (c Creds) hasClient() bool { return c.ClientID != "" && (c.ClientSecret != "" || c.PrivateKey != nil) }
+func (c Creds) hasClient() bool {
+	return c.ClientID != "" && (c.ClientSecret != "" || c.PrivateKey != nil)
+}
 func (c Creds) hasSubject() bool { return c.SubjectToken != "" }
 
 // Discovered holds everything the discovery phase resolved.
 type Discovered struct {
-	Issuer                       string
-	TokenEndpoint                string
-	AuthorizationEndpoint        string
-	JWKSURI                      string
-	GrantTypesSupported          []string
+	Issuer                        string
+	TokenEndpoint                 string
+	AuthorizationEndpoint         string
+	JWKSURI                       string
+	GrantTypesSupported           []string
 	CodeChallengeMethodsSupported []string
 	DPoPSigningAlgValuesSupported []string
 	// PRM is the RFC 9728 Protected Resource Metadata (only set in --target mode).
 	PRMAuthorizationServers []string
-	// Raw metadata documents, kept for evidence.
-	RawASMetadata  []byte
-	RawPRM         []byte
+	// raw metadata documents, kept for evidence.
+	RawASMetadata []byte
+	RawPRM        []byte
 }
 
 func (d Discovered) advertisesTokenExchange() bool {

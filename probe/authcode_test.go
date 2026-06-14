@@ -24,7 +24,7 @@ func TestPKCEPairVerifies(t *testing.T) {
 }
 
 func TestAuthCodeFlowAgainstAutoConsentAS(t *testing.T) {
-	// A fake AS that immediately redirects back with a code (no human), then
+	// a fake AS that immediately redirects back with a code (no human), then
 	// exchanges the code for a token at /token.
 	var as *httptest.Server
 	as = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

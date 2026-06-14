@@ -2,8 +2,8 @@
 
 `aoa-conform` is a point-at-your-own-issuer diagnostic for MCP authorization. You
 give it the URL of your MCP server or your OAuth issuer, and it walks the agent
-authorization loop the way a real MCP client would — discovery, PKCE, resource
-indicators, token exchange, DPoP — and prints a capability matrix telling you
+authorization loop the way a real MCP client would (discovery, PKCE, resource
+indicators, token exchange, DPoP), then prints a capability matrix telling you
 exactly which parts of the spec your setup honors.
 
 It is **not** a vendor leaderboard. It is a diagnostic of *your* deployment:
@@ -13,10 +13,10 @@ actually does.
 
 The checks are grouped into two profiles:
 
-- **MCP Core** — the baseline every MCP deployment needs: RFC 9728 protected
+- **MCP Core**: the baseline every MCP deployment needs. RFC 9728 protected
   resource metadata discovery, RFC 8414 authorization server metadata, PKCE
   (RFC 7636), resource indicators (RFC 8707), and OAuth 2.1 baseline behavior.
-- **MCP Agent-Auth Extended** — the agent-delegation surface: OAuth token
+- **MCP Agent-Auth Extended**: the agent-delegation surface. OAuth token
   exchange (RFC 8693) and DPoP sender-constrained tokens (RFC 9449).
 
 ## Install
@@ -45,7 +45,7 @@ Exactly one of `--target` or `--issuer` is required.
 
 ### Credential tiers
 
-Many checks only apply once you give the tool credentials — without them, those
+Many checks only apply once you give the tool credentials. Without them, those
 checks **skip** (see below), they do not fail.
 
 - **Tier 0 (no creds):** discovery and metadata checks only.
@@ -60,12 +60,12 @@ checks **skip** (see below), they do not fail.
 
 ### Other flags
 
-- `--present` — complete the loop: take a token obtained from the AS and present
+- `--present`: complete the loop. Take a token obtained from the AS and present
   it to the resource server, asserting it is accepted.
-- `--profile core|extended` — limit the run to a single profile (default: all).
-- `--format md|json` — human-readable scorecard (default) or machine-readable
-  JSON for CI / offline audit.
-- `--strict` — treat SHOULD-level violations as failures (changes the exit code,
+- `--profile core|extended`: limit the run to a single profile (default: all).
+- `--format md|json`: human-readable scorecard (default) or machine-readable
+  JSON for CI and offline audit.
+- `--strict`: treat SHOULD-level violations as failures (changes the exit code,
   not the report).
 
 ### Exit code
@@ -78,41 +78,19 @@ affect the exit code.
 
 Every check resolves to one of:
 
-- **pass** ✅ — the behavior is present and correct.
-- **fail** ❌ — the behavior is required (or expected at this severity) and the
+- **pass** ✅: the behavior is present and correct.
+- **fail** ❌: the behavior is required (or expected at this severity) and the
   server got it wrong. This is a real finding.
-- **skip** ⚪ — the check's precondition was not met: a capability the server
+- **skip** ⚪: the check's precondition was not met. A capability the server
   never advertised, or a credential you did not supply. A skip is **not** a
   failure. If your issuer does not advertise token exchange, the RFC 8693 checks
-  skip — that is the tool correctly reporting "not applicable to this setup,"
+  skip, which is the tool correctly reporting "not applicable to this setup,"
   not a defect.
 
-(A fourth state, **error** 🟠, means the probe itself could not complete —
-a transport error or malformed response — and is treated like a failure for the
-exit code.)
+(A fourth state, **error** 🟠, means the probe itself could not complete, for
+example a transport error or malformed response, and is treated like a failure
+for the exit code.)
 
 This distinction is the whole point: the tool tells you what your setup *does*,
 gates the rest behind preconditions, and never penalizes you for a capability
 you legitimately don't offer.
-
-## Testing
-
-Hermetic tests run entirely against an in-process fake authorization server and
-a real `aoa`-guarded resource server (the dogfood test) — no network, no Docker:
-
-```sh
-make test
-```
-
-The real-provider scorecard runs the full suite against a live OAuth provider.
-A Keycloak setup is provided under `integration/`; it is gated behind the
-`integration` build tag and skips unless `KEYCLOAK_ISSUER` is set:
-
-```sh
-make integration
-```
-
-`make integration` brings up Keycloak (`integration/docker-compose.yml`, with
-`token-exchange` and `dpop` features enabled) and runs the tagged test. Seed a
-realm and export `KEYCLOAK_ISSUER` (and optionally `CLIENT_ID`,
-`CLIENT_SECRET`, `SUBJECT_TOKEN`) before running.

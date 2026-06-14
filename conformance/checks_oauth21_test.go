@@ -43,7 +43,7 @@ func TestOAuth21_ErrorShape(t *testing.T) {
 }
 
 func TestOAuth21_Reachable_Fail(t *testing.T) {
-	// Hand-crafted target: token_endpoint precondition is met, but the endpoint
+	// hand-crafted target: token_endpoint precondition is met, but the endpoint
 	// points at a closed port so the probe yields a transport error → fail.
 	tgt := &Target{
 		Discovered: Discovered{TokenEndpoint: "http://127.0.0.1:1/token"},

@@ -84,7 +84,7 @@ func TestRFC8414_SkipsWithoutIssuer(t *testing.T) {
 	}
 }
 
-// The following fail-tests use hand-crafted Discovered targets: full discovery
+// the following fail-tests use hand-crafted Discovered targets: full discovery
 // against an unreachable AS would skip (empty Discovered → precondition false),
 // so the check logic is exercised directly with a satisfied precondition.
 

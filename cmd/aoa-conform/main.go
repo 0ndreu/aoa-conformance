@@ -78,7 +78,7 @@ func run(o options, w io.Writer) int {
 		},
 	}
 
-	// Interactive authorization_code wiring (Decision 5): obtaining a user
+	// interactive authorization_code wiring (Decision 5): obtaining a user
 	// token requires the AS endpoints, which only exist after discovery. Run a
 	// discovery-only pass to populate tgt.Discovered, then drive the browser
 	// flow and stash the resulting token as the Tier-2 subject token.

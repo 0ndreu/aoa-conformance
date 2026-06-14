@@ -39,7 +39,7 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 	issuer := in.Issuer
 
 	if in.MCPURL != "" {
-		// Step 1: trigger the 401 and read the resource_metadata pointer.
+		// step 1: trigger the 401 and read the resource_metadata pointer.
 		resp, err := Get(ctx, c, in.MCPURL)
 		if err != nil {
 			return nil, err
@@ -47,10 +47,10 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 		d.WWWAuthenticate = resp.Header.Get("WWW-Authenticate")
 		prmURL := prmURLFromChallenge(d.WWWAuthenticate)
 		if prmURL == "" {
-			// Fall back to the well-known default path on the MCP origin.
+			// fall back to the well-known default path on the MCP origin.
 			prmURL = strings.TrimRight(originOf(in.MCPURL), "/") + "/.well-known/oauth-protected-resource"
 		}
-		// Step 2: fetch the PRM.
+		// step 2: fetch the PRM.
 		prm, err := Get(ctx, c, prmURL)
 		if err != nil {
 			return nil, err
@@ -72,7 +72,7 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 	}
 	d.Issuer = issuer
 
-	// Step 3: AS metadata (RFC 8414 well-known, with OIDC fallback).
+	// step 3: AS metadata (RFC 8414 well-known, with OIDC fallback).
 	meta, raw, err := fetchASMetadata(ctx, c, issuer)
 	if err != nil {
 		return d, err

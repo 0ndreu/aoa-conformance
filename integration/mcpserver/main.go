@@ -35,7 +35,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Resolve AS endpoints: explicit config wins, else discover.
+	// resolve AS endpoints: explicit config wins, else discover.
 	jwks, tokenEP := p.JWKSURI, p.TokenEndpoint
 	if jwks == "" || tokenEP == "" {
 		client := tlsClient(cfg)
@@ -54,14 +54,14 @@ func main() {
 		}
 	}
 
-	// Client for the RFC 8693 exchange (provider token endpoint) and the
-	// gateway's downstream call — both are https with the dev self-signed cert,
+	// client for the RFC 8693 exchange (provider token endpoint) and the
+	// gateway's downstream call. Both are https with the dev self-signed cert,
 	// so they need a CA-trusting client. ErrUseLastResponse stops credential
 	// replay across redirects (aoa's exchanger recommends this for custom clients).
 	exchClient := tlsClient(cfg)
 	exchClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	// Pre-fetch the provider JWKS with the CA-trusting client and pass it as
+	// pre-fetch the provider JWKS with the CA-trusting client and pass it as
 	// static keys: aoa's built-in remote JWKS fetcher uses a default http.Client
 	// that cannot trust the dev cert over https, so without this the guards 401
 	// every token. (A real https-trusted provider could rely on JWKSURI instead.)

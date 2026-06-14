@@ -17,7 +17,7 @@ func registerSmoke(r *Registry) {
 		Run: func(t *Target) Result {
 			token := t.Creds.SubjectToken
 			if token == "" {
-				// Obtain a client_credentials token.
+				// obtain a client_credentials token.
 				form := probe.FormString("grant_type", "client_credentials", "client_id", t.Creds.ClientID)
 				if t.Creds.ClientSecret != "" {
 					form.Set("client_secret", t.Creds.ClientSecret)

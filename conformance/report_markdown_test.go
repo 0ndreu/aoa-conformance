@@ -13,14 +13,14 @@ func TestMarkdownReporterGroupsByProfileAndShowsStatusIcons(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"# MCP Auth Conformance — https://issuer.example",
-		"## MCP Core",          // profile heading
+		"# MCP Auth Conformance: https://issuer.example",
+		"## MCP Core", // profile heading
 		"## MCP Agent-Auth Extended",
-		"RFC 8414",             // rfc grouping
-		"✅",                    // pass icon
-		"❌",                    // fail icon
-		"⚪",                    // skip icon
-		"forged act accepted",  // fail message surfaced
+		"RFC 8414",            // rfc grouping
+		"✅",                   // pass icon
+		"❌",                   // fail icon
+		"⚪",                   // skip icon
+		"forged act accepted", // fail message surfaced
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("scorecard missing %q\n---\n%s", want, out)

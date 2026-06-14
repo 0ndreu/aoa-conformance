@@ -143,7 +143,7 @@ func (as *AS) handleDPoP(w http.ResponseWriter, r *http.Request, proof string) (
 		return "", false
 	}
 
-	// Nonce challenge on first contact unless disabled.
+	// nonce challenge on first contact unless disabled.
 	if !as.v.SkipDPoPNonce && p.nonce == "" {
 		w.Header().Set("DPoP-Nonce", dpopNonce)
 		as.tokenError(w, 400, "use_dpop_nonce", "authorization server requires nonce in DPoP proof")
@@ -156,7 +156,7 @@ func (as *AS) handleDPoP(w http.ResponseWriter, r *http.Request, proof string) (
 		return "", false
 	}
 
-	// Buggy AS: reject even a valid proof.
+	// buggy AS: reject even a valid proof.
 	if as.v.RejectValidDPoP {
 		as.tokenError(w, 400, "invalid_dpop_proof", "DPoP proof rejected")
 		return "", false
@@ -278,7 +278,7 @@ func (as *AS) handleExchange(w http.ResponseWriter, r *http.Request, dpop bool, 
 		"issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
 		"token_type":        as.tokenType(dpop),
 	}
-	// Scope handling: a correct AS echoes the requested (possibly narrower)
+	// scope handling: a correct AS echoes the requested (possibly narrower)
 	// scope. WidenScope buggily returns a broader scope than requested.
 	if reqScope := r.Form.Get("scope"); reqScope != "" {
 		if as.v.WidenScope {

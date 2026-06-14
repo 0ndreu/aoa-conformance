@@ -15,7 +15,7 @@ import (
 
 // TestDogfoodAgainstRealAOAServer boots a real aoa-guarded resource server
 // (RFC 9728 metadata handler + Bearer middleware) in front of a fake AS, and
-// asserts aoa-conform's RFC 9728 discovery checks all go green against it —
+// asserts aoa-conform's RFC 9728 discovery checks all go green against it,
 // proving the tool works against a genuine aoa server without coupling the unit
 // tests to aoa.
 //
@@ -28,7 +28,7 @@ import (
 //     is required. AllowInsecureLocalhost relaxes the *resource* scheme to http for
 //     localhost, but each AuthorizationServers entry is validated by aoa's
 //     validateIssuerURL, which requires https with NO localhost exception. So the
-//     advertised AS must be served over https — here a second httptest TLS server
+//     advertised AS must be served over https: here a second httptest TLS server
 //     that re-serves the fake AS's RFC 8414 metadata.
 //   - aoa.BearerOpts has NO ResourceMetadata field. The RFC 9728 resource_metadata
 //     hint in the 401 WWW-Authenticate challenge is derived from BearerOpts.Resource
@@ -46,7 +46,7 @@ func TestDogfoodAgainstRealAOAServer(t *testing.T) {
 
 	// aoa rejects an http authorization_servers entry, so re-serve the fake AS's
 	// RFC 8414 metadata over https. token_endpoint stays the fake AS's real (http)
-	// endpoint — the RFC 9728 as_resolvable check only needs a resolvable
+	// endpoint, the RFC 9728 as_resolvable check only needs a resolvable
 	// token_endpoint string, it does not have to be reached during discovery.
 	asTLS := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/.well-known/oauth-authorization-server" {
@@ -88,7 +88,7 @@ func TestDogfoodAgainstRealAOAServer(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})))
 
-	// One client that trusts the AS TLS server's cert (plain http to the MCP
+	// one client that trusts the AS TLS server's cert (plain http to the MCP
 	// server works on any client).
 	pool := x509.NewCertPool()
 	pool.AddCert(asTLS.Certificate())
@@ -97,10 +97,10 @@ func TestDogfoodAgainstRealAOAServer(t *testing.T) {
 	tgt := &conformance.Target{MCPURL: resource, Client: client}
 	rep := (&conformance.Runner{Registry: conformance.DefaultRegistry()}).Run(tgt)
 
-	// All four RFC 9728 client-side discovery checks must PASS against a real
+	// all four RFC 9728 client-side discovery checks must PASS against a real
 	// aoa server: the resource_metadata challenge hint, a fetchable+valid PRM,
 	// a non-empty authorization_servers list, and a resolvable AS token endpoint.
-	// We assert pass (not merely "not fail") and that all four actually ran, so a
+	// we assert pass (not merely "not fail") and that all four actually ran, so a
 	// regression that silently turned them into skips can't pass unnoticed.
 	rfc9728Passes := 0
 	for _, e := range rep.Entries {

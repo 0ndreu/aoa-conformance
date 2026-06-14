@@ -103,16 +103,16 @@ func registerRFC8693(r *Registry) {
 				if err != nil {
 					return Result{Status: StatusError, Message: err.Error()}
 				}
-				// The test supplies a subject whose may_act does NOT include the actor.
+				// the test supplies a subject whose may_act does NOT include the actor.
 				// A correct AS rejects with invalid_grant; acceptance is a security failure.
 				if resp.StatusCode == 200 {
-					return Result{Status: StatusFail, Message: "unauthorized actor accepted — may_act not enforced", Evidence: resp.Evidence}
+					return Result{Status: StatusFail, Message: "unauthorized actor accepted; may_act not enforced", Evidence: resp.Evidence}
 				}
 				if resp.JSON()["error"] == "invalid_grant" {
 					return Result{Status: StatusPass, Message: "unauthorized actor rejected with invalid_grant", Evidence: resp.Evidence}
 				}
 				return Result{Status: StatusFail, Message: fmt.Sprintf(
-					"actor rejected but not via invalid_grant (HTTP %d, error=%v) — cannot confirm may_act enforcement",
+					"actor rejected but not via invalid_grant (HTTP %d, error=%v); cannot confirm may_act enforcement",
 					resp.StatusCode, resp.JSON()["error"]), Evidence: resp.Evidence}
 			}),
 

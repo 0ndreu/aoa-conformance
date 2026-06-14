@@ -96,7 +96,7 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
 		return "", ctx.Err()
 	}
 
-	// Exchange the code ourselves rather than via oauth2.Exchange: oauth2 keys
+	// exchange the code ourselves rather than via oauth2.Exchange: oauth2 keys
 	// token parsing off the response Content-Type and treats anything that is
 	// not JSON-typed as a urlencoded form, silently dropping a JSON body served
 	// as text/plain. Our PostForm + JSON parse is content-type-agnostic and also

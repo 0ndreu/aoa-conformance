@@ -83,7 +83,7 @@ func registerDPoP(r *Registry) {
 				if err != nil {
 					return Result{Status: StatusError, Message: err.Error()}
 				}
-				// First obtain the nonce via a normal challenge, then send a
+				// first obtain the nonce via a normal challenge, then send a
 				// proof carrying a tampered htu.
 				nonce := dpopNonceFor(t, key)
 				proof, err := key.Proof(probe.ProofParams{

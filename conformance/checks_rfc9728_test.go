@@ -131,7 +131,7 @@ func TestRFC9728_ASResolvable_Fail(t *testing.T) {
 	bad := fakeas.NewRS(as.URL, fakeas.RSViolations{UnresolvableAuthServer: true})
 	defer bad.Close()
 
-	// Short-timeout client so the closed-port AS fetch fails fast.
+	// short-timeout client so the closed-port AS fetch fails fast.
 	bt := &Target{MCPURL: bad.URL + "/mcp", Client: &http.Client{Timeout: 2 * time.Second}}
 	(&Runner{Registry: DefaultRegistry()}).Run(bt)
 	if got := runChecksFor(t, "RFC 9728", bt)["rfc9728.prm.as_resolvable"]; got.Status != StatusFail {

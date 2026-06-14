@@ -15,7 +15,7 @@ import (
 // Signer mints (and verifies) JWTs with an in-memory RSA key. It is the
 // building block both for the fake AS's correct tokens and for adversarial
 // probes (e.g. handing a self-signed token to a real AS to see if it is
-// wrongly accepted). It uses jwx directly — aoa hides jwx, so we cannot.
+// wrongly accepted). It uses jwx directly. aoa hides jwx, so we cannot.
 type Signer struct {
 	priv jwk.Key
 	pub  jwk.Key

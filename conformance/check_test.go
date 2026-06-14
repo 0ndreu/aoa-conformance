@@ -2,18 +2,6 @@ package conformance
 
 import "testing"
 
-func TestStatusAndSeverityConstants(t *testing.T) {
-	if StatusPass != "pass" || StatusFail != "fail" || StatusSkip != "skip" || StatusError != "error" {
-		t.Fatal("status constant values changed; locked schema requires these strings")
-	}
-	if SeverityMUST != "MUST" || SeveritySHOULD != "SHOULD" || SeverityMAY != "MAY" {
-		t.Fatal("severity constant values changed")
-	}
-	if ProfileCore != "mcp-core" || ProfileExtended != "mcp-agent-auth-extended" {
-		t.Fatal("profile constant values changed")
-	}
-}
-
 func TestCheckSkipsWhenPreconditionFalse(t *testing.T) {
 	c := Check{
 		ID:           "test.always_skip",

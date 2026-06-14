@@ -23,7 +23,7 @@ func (r *Runner) Run(t *Target) Report {
 
 	if !r.SkipDiscovery {
 		if err := r.discover(t); err != nil {
-			// Discovery failure is not fatal: checks that need it will skip or
+			// discovery failure is not fatal: checks that need it will skip or
 			// fail on their own. Record it as a synthetic error entry.
 			rep.Entries = append(rep.Entries, Entry{
 				Check:  Check{ID: "discovery", Profile: ProfileCore, RFC: "RFC 8414", Severity: SeverityMUST, Description: "resolve endpoints"},
@@ -56,7 +56,7 @@ func (r *Runner) discover(t *Target) error {
 		MCPURL: t.MCPURL,
 		Issuer: t.Issuer,
 	})
-	// Populate whatever discovery resolved even on a partial failure: a
+	// populate whatever discovery resolved even on a partial failure: a
 	// half-resolved chain (e.g. PRM lists an AS that doesn't yield usable
 	// metadata) is exactly what some checks must observe and fail on. The
 	// error is still propagated so the runner records the synthetic entry.

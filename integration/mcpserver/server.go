@@ -50,7 +50,7 @@ func buildMux(cfg *Config, deps buildDeps) (*http.ServeMux, error) {
 		return nil, fmt.Errorf("metadata handler: %w", err)
 	}
 
-	// --- Bearer guard for /mcp ---
+	// --- bearer guard for /mcp ---
 	guard, err := aoa.RequireBearer(aoa.BearerOpts{
 		Issuer:         p.Issuer,
 		JWKSURI:        deps.jwksURI,
@@ -64,7 +64,7 @@ func buildMux(cfg *Config, deps buildDeps) (*http.ServeMux, error) {
 		return nil, fmt.Errorf("require bearer (mcp): %w", err)
 	}
 
-	// --- Bearer guard for /data (downstream audience) ---
+	// --- bearer guard for /data (downstream audience) ---
 	guardDown, err := aoa.RequireBearer(aoa.BearerOpts{
 		Issuer:   p.Issuer,
 		JWKSURI:  deps.jwksURI,

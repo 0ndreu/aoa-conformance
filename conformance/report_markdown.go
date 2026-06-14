@@ -24,7 +24,7 @@ var profileTitle = map[Profile]string{
 
 func (MarkdownReporter) Write(w io.Writer, r Report) error {
 	s := r.Summarize()
-	fmt.Fprintf(w, "# MCP Auth Conformance — %s\n\n", r.Target)
+	fmt.Fprintf(w, "# MCP Auth Conformance: %s\n\n", r.Target)
 	fmt.Fprintf(w, "%s %d passed · %s %d failed · %s %d skipped · %s %d errored\n\n",
 		statusIcon[StatusPass], s.Pass, statusIcon[StatusFail], s.Fail,
 		statusIcon[StatusSkip], s.Skip, statusIcon[StatusError], s.Error)

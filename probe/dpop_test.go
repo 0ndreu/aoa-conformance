@@ -60,7 +60,7 @@ func TestDPoPProofHasRequiredClaims(t *testing.T) {
 
 func TestDPoPProofTamperOptions(t *testing.T) {
 	k, _ := NewProofKey()
-	// A proof with a deliberately wrong htu, to verify the AS rejects it.
+	// a proof with a deliberately wrong htu, to verify the AS rejects it.
 	bad, err := k.Proof(ProofParams{HTM: "POST", HTU: "https://issuer.example/token", TamperHTU: "https://evil.example/token"})
 	if err != nil {
 		t.Fatalf("proof: %v", err)
@@ -69,7 +69,7 @@ func TestDPoPProofTamperOptions(t *testing.T) {
 	if !strings.Contains(claims["htu"].(string), "evil.example") {
 		t.Fatalf("tamper not applied: %v", claims["htu"])
 	}
-	// A proof carrying a nonce (for the use_dpop_nonce retry).
+	// a proof carrying a nonce (for the use_dpop_nonce retry).
 	withNonce, _ := k.Proof(ProofParams{HTM: "POST", HTU: "https://issuer.example/token", Nonce: "abc123"})
 	_, c2 := decodeJWS(t, withNonce)
 	if c2["nonce"] != "abc123" {

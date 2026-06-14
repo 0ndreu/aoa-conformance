@@ -32,7 +32,7 @@ func TestSignedJWTAndKeyMaterial(t *testing.T) {
 
 func TestTokenWithMayActAndAct(t *testing.T) {
 	signer, _ := NewSigner()
-	// A token authorizing actor "svc-gateway" to act for "alice".
+	// a token authorizing actor "svc-gateway" to act for "alice".
 	tok, err := signer.SignJWT(map[string]any{
 		"sub":     "alice",
 		"iss":     "https://issuer.example",
