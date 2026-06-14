@@ -3,7 +3,7 @@ module github.com/0ndreu/aoa-conformance
 go 1.25.0
 
 require (
-	github.com/0ndreu/aoa v0.0.0-00010101000000-000000000000
+	github.com/0ndreu/aoa v0.0.1
 	github.com/lestrrat-go/jwx/v3 v3.1.1
 	golang.org/x/oauth2 v0.36.0
 )
@@ -22,5 +22,3 @@ require (
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 )
-
-replace github.com/0ndreu/aoa => ../aoa
