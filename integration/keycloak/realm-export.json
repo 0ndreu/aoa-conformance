@@ -18,7 +18,7 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
       "redirectUris": ["http://localhost:*", "https://localhost:*", "http://127.0.0.1:*"],
-      "defaultClientScopes": ["mcp:read"],
+      "optionalClientScopes": ["mcp:read"],
       "attributes": { "dpop.bound.access.tokens": "false" },
       "protocolMappers": [
         {
@@ -51,7 +51,7 @@
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": true,
-      "defaultClientScopes": ["mcp:read"],
+      "optionalClientScopes": ["mcp:read"],
       "attributes": { "standard.token.exchange.enabled": "true" },
       "protocolMappers": [
         {

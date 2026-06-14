@@ -70,6 +70,7 @@ func (r *Runner) discover(t *Target) error {
 			CodeChallengeMethodsSupported: d.CodeChallengeMethodsSupported,
 			DPoPSigningAlgValuesSupported: d.DPoPSigningAlgValuesSupported,
 			PRMAuthorizationServers:       d.PRMAuthorizationServers,
+			PRMScopesSupported:            d.PRMScopesSupported,
 			RawASMetadata:                 d.RawASMetadata,
 			RawPRM:                        d.RawPRM,
 		}

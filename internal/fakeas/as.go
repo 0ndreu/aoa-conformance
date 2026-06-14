@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"sync"
 
 	"github.com/0ndreu/aoa-conformance/probe"
 )
@@ -39,6 +41,17 @@ type AS struct {
 	*httptest.Server
 	v      Violations
 	signer *probe.Signer
+
+	mu       sync.Mutex
+	lastForm url.Values
+}
+
+// LastTokenForm returns the form values of the most recent /token request, so
+// tests can assert which parameters (e.g. scope) the client sent.
+func (as *AS) LastTokenForm() url.Values {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	return as.lastForm
 }
 
 func NewAS(v Violations) *AS {
@@ -105,6 +118,9 @@ func (as *AS) handleJWKS(w http.ResponseWriter, _ *http.Request) {
 
 func (as *AS) handleToken(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	as.mu.Lock()
+	as.lastForm = r.Form
+	as.mu.Unlock()
 
 	// DPoP handling (RFC 9449): if a DPoP proof is present, run the nonce
 	// challenge + htu verification and compute the cnf.jkt to bind.

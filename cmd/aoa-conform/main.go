@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/0ndreu/aoa-conformance/conformance"
@@ -21,6 +22,7 @@ type options struct {
 	ClientID     string
 	ClientSecret string
 	SubjectToken string
+	Scope        string // space-separated scopes to request (--scope)
 	Profile      string // "", "core", "extended"
 	Format       string // "md" | "json"
 	Present      bool
@@ -37,6 +39,7 @@ func main() {
 	flag.StringVar(&o.ClientID, "client-id", "", "client id (Tier 1)")
 	flag.StringVar(&o.ClientSecret, "client-secret", "", "client secret (Tier 1)")
 	flag.StringVar(&o.SubjectToken, "subject-token", "", "user token to exchange (Tier 2)")
+	flag.StringVar(&o.Scope, "scope", "", "space-separated scopes to request when obtaining a token")
 	flag.StringVar(&o.Profile, "profile", "", "limit to: core | extended (default: all)")
 	flag.StringVar(&o.Format, "format", "md", "report format: md | json")
 	flag.BoolVar(&o.Present, "present", false, "complete the agent loop: present a token to the resource server")
@@ -74,6 +77,7 @@ func run(o options, w io.Writer) int {
 		Creds: conformance.Creds{
 			ClientID: o.ClientID, ClientSecret: o.ClientSecret, UsePostAuth: true,
 			SubjectToken:   o.SubjectToken,
+			Scopes:         splitScopes(o.Scope),
 			PresentEnabled: o.Present,
 		},
 	}
@@ -93,6 +97,7 @@ func run(o options, w io.Writer) int {
 			TokenEndpoint:         tgt.Discovered.TokenEndpoint,
 			ClientID:              o.ClientID,
 			ClientSecret:          o.ClientSecret,
+			Scopes:                conformance.EffectiveScopes(splitScopes(o.Scope), tgt.Discovered.PRMScopesSupported),
 			HTTPClient:            tgt.Client,
 		})
 		if err != nil {
@@ -138,6 +143,7 @@ func discoverInto(ctx context.Context, tgt *conformance.Target) error {
 	if d != nil {
 		tgt.Discovered.AuthorizationEndpoint = d.AuthorizationEndpoint
 		tgt.Discovered.TokenEndpoint = d.TokenEndpoint
+		tgt.Discovered.PRMScopesSupported = d.PRMScopesSupported
 	}
 	if err != nil {
 		return err
@@ -146,6 +152,17 @@ func discoverInto(ctx context.Context, tgt *conformance.Target) error {
 		return fmt.Errorf("discovery did not resolve authorization/token endpoints")
 	}
 	return nil
+}
+
+// splitScopes parses a space-separated --scope value into individual scopes,
+// dropping empty fields. Returns nil for an empty value so no scope parameter
+// is sent.
+func splitScopes(s string) []string {
+	f := strings.Fields(s)
+	if len(f) == 0 {
+		return nil
+	}
+	return f
 }
 
 func shouldViolations(rep conformance.Report) bool {

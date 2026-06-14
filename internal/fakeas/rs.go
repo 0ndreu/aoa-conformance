@@ -20,8 +20,9 @@ type RSViolations struct {
 // broken variants are possible; the real-aoa version lives in dogfood_test.go.
 type RS struct {
 	*httptest.Server
-	asURL string
-	v     RSViolations
+	asURL  string
+	v      RSViolations
+	Scopes []string // advertised in PRM scopes_supported (set before use)
 }
 
 func NewRS(asURL string, v RSViolations) *RS {
@@ -47,6 +48,9 @@ func (rs *RS) handlePRM(w http.ResponseWriter, _ *http.Request) {
 			as = "http://127.0.0.1:1" // closed port → RFC 8414 fetch yields no metadata
 		}
 		doc["authorization_servers"] = []string{as}
+	}
+	if len(rs.Scopes) > 0 {
+		doc["scopes_supported"] = rs.Scopes
 	}
 	writeJSON(w, 200, doc)
 }

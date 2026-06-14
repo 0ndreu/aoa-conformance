@@ -25,6 +25,7 @@ type Discovered struct {
 	CodeChallengeMethodsSupported []string
 	DPoPSigningAlgValuesSupported []string
 	PRMAuthorizationServers       []string
+	PRMScopesSupported            []string
 	WWWAuthenticate               string
 	RawASMetadata                 []byte
 	RawPRM                        []byte
@@ -58,9 +59,11 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 		d.RawPRM = prm.Body
 		var prmDoc struct {
 			AuthorizationServers []string `json:"authorization_servers"`
+			ScopesSupported      []string `json:"scopes_supported"`
 		}
 		_ = json.Unmarshal(prm.Body, &prmDoc)
 		d.PRMAuthorizationServers = prmDoc.AuthorizationServers
+		d.PRMScopesSupported = prmDoc.ScopesSupported
 		if len(prmDoc.AuthorizationServers) == 0 {
 			return d, errors.New("PRM has no authorization_servers")
 		}

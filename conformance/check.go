@@ -93,7 +93,8 @@ type Creds struct {
 	UsePostAuth   bool   // client_secret_post vs client_secret_basic
 	PrivateKey    []byte // RFC 7523 private_key_jwt (PEM/JWK); optional
 	PrivateKeyAlg string
-	SubjectToken  string // supplied Tier-2 user token
+	SubjectToken  string   // supplied Tier-2 user token
+	Scopes        []string // scopes to request when obtaining a token (--scope)
 
 	AuthCodeAvailable bool // true after an interactive auth_code flow; gates pkce.enforce.reject_plain
 	PresentEnabled    bool // set by CLI --present; gates the smoke check
@@ -103,6 +104,16 @@ func (c Creds) hasClient() bool {
 	return c.ClientID != "" && (c.ClientSecret != "" || c.PrivateKey != nil)
 }
 func (c Creds) hasSubject() bool { return c.SubjectToken != "" }
+
+// EffectiveScopes resolves which scopes to request when obtaining a token:
+// an explicit --scope value wins, otherwise the scopes the resource advertises
+// in its RFC 9728 PRM scopes_supported are used.
+func EffectiveScopes(explicit, fromPRM []string) []string {
+	if len(explicit) > 0 {
+		return explicit
+	}
+	return fromPRM
+}
 
 // Discovered holds everything the discovery phase resolved.
 type Discovered struct {
@@ -115,6 +126,7 @@ type Discovered struct {
 	DPoPSigningAlgValuesSupported []string
 	// PRM is the RFC 9728 Protected Resource Metadata (only set in --target mode).
 	PRMAuthorizationServers []string
+	PRMScopesSupported      []string
 	// raw metadata documents, kept for evidence.
 	RawASMetadata []byte
 	RawPRM        []byte

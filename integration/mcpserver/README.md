@@ -88,7 +88,9 @@ steps needed; they survive a fresh `--import-realm`):
 
 Verified working directly against the token endpoint: exchanging an
 `mcp-conform` token via `mcp-gateway` for `audience=downstream-api` yields a token
-with `aud=downstream-api`, `azp=mcp-gateway`, `scope=mcp:read`:
+with `aud=downstream-api`, `azp=mcp-gateway`, `scope=mcp:read`. `mcp:read` is an
+optional client scope, so the exchange request must ask for it with `-d scope=mcp:read`;
+drop that parameter and the issued token comes back with an empty `scope`:
 ```sh
 TOK=https://localhost:8443/realms/mcp/protocol/openid-connect/token
 SUBJ=$(curl -s --cacert ../keycloak/tls/ca.pem \
@@ -99,5 +101,5 @@ curl -s --cacert ../keycloak/tls/ca.pem \
   -d client_id=mcp-gateway -d client_secret=gateway-secret \
   -d subject_token="$SUBJ" \
   -d subject_token_type=urn:ietf:params:oauth:token-type:access_token \
-  -d audience=downstream-api "$TOK"
+  -d audience=downstream-api -d scope=mcp:read "$TOK"
 ```

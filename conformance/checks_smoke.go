@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/0ndreu/aoa-conformance/probe"
 )
@@ -21,6 +22,9 @@ func registerSmoke(r *Registry) {
 				form := probe.FormString("grant_type", "client_credentials", "client_id", t.Creds.ClientID)
 				if t.Creds.ClientSecret != "" {
 					form.Set("client_secret", t.Creds.ClientSecret)
+				}
+				if scopes := EffectiveScopes(t.Creds.Scopes, t.Discovered.PRMScopesSupported); len(scopes) > 0 {
+					form.Set("scope", strings.Join(scopes, " "))
 				}
 				resp, err := probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, nil)
 				if err != nil {
