@@ -89,6 +89,14 @@ func (r *Runner) discover(t *Target) error {
 			TokenEndpointAuthMethodsSupported:  d.TokenEndpointAuthMethodsSupported,
 			PushedAuthorizationRequestEndpoint: d.PushedAuthorizationRequestEndpoint,
 			RequirePushedAuthorizationRequests: d.RequirePushedAuthorizationRequests,
+
+			IntrospectionEndpoint:                      d.IntrospectionEndpoint,
+			RevocationEndpoint:                         d.RevocationEndpoint,
+			ResponseTypesSupported:                     d.ResponseTypesSupported,
+			AuthorizationResponseIssParameterSupported: d.AuthorizationResponseIssParameterSupported,
+			SignedMetadata:                             d.SignedMetadata,
+			TLSClientCertificateBoundAccessTokens:      d.TLSClientCertificateBoundAccessTokens,
+			MTLSEndpointAliases:                        d.MTLSEndpointAliases,
 		}
 		if t.Hints == nil {
 			t.Hints = map[string]string{}

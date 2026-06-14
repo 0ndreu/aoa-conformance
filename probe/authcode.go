@@ -26,6 +26,12 @@ func VerifyPKCE(verifier, challenge string) bool {
 	return b64url(sum[:]) == challenge
 }
 
+// AuthCodeResult is the outcome of the interactive flow.
+type AuthCodeResult struct {
+	AccessToken string
+	CallbackISS string // RFC 9207 iss from the authorization response, if present
+}
+
 // AuthCodeConfig configures the interactive flow.
 type AuthCodeConfig struct {
 	AuthorizationEndpoint string
@@ -46,10 +52,10 @@ type AuthCodeConfig struct {
 // a localhost callback server, opens the authorize URL in the user's browser,
 // waits for the redirect, and exchanges the code for a token. Returns the
 // access token string.
-func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
+func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (AuthCodeResult, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return "", err
+		return AuthCodeResult{}, err
 	}
 	defer ln.Close()
 	redirectURI := fmt.Sprintf("http://%s/callback", ln.Addr().String())
@@ -64,10 +70,11 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
 	verifier, challenge := NewPKCE()
 	state := randHex(16)
 
+	var callbackISS string
 	var authURL string
 	if cfg.UsePAR {
 		if cfg.PAREndpoint == "" {
-			return "", errors.New("PAR required but no pushed_authorization_request_endpoint advertised")
+			return AuthCodeResult{}, errors.New("PAR required but no pushed_authorization_request_endpoint advertised")
 		}
 		parForm := FormString(
 			"client_id", cfg.ClientID,
@@ -83,11 +90,11 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
 		}
 		resp, err := PostForm(ctx, httpClientOrDefault(cfg.HTTPClient), cfg.PAREndpoint, parForm, nil)
 		if err != nil {
-			return "", fmt.Errorf("PAR push failed: %w", err)
+			return AuthCodeResult{}, fmt.Errorf("PAR push failed: %w", err)
 		}
 		requestURI, _ := resp.JSON()["request_uri"].(string)
 		if requestURI == "" {
-			return "", fmt.Errorf("PAR endpoint returned no request_uri (HTTP %d)", resp.StatusCode)
+			return AuthCodeResult{}, fmt.Errorf("PAR endpoint returned no request_uri (HTTP %d)", resp.StatusCode)
 		}
 		// per RFC 9126 the authorize request carries only client_id +
 		// request_uri; redirect_uri and state are included here so the
@@ -113,6 +120,7 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
 			return
 		}
 		fmt.Fprintln(w, "aoa-conform: login complete, you can close this tab.")
+		callbackISS = r.URL.Query().Get("iss")
 		codeCh <- r.URL.Query().Get("code")
 	})}
 	go srv.Serve(ln)
@@ -129,9 +137,9 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
 	select {
 	case code = <-codeCh:
 	case err := <-errCh:
-		return "", err
+		return AuthCodeResult{}, err
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return AuthCodeResult{}, ctx.Err()
 	}
 
 	// exchange the code ourselves rather than via oauth2.Exchange: oauth2 keys
@@ -155,13 +163,13 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
 	}
 	resp, err := PostForm(ctx, httpClient, cfg.TokenEndpoint, form, nil)
 	if err != nil {
-		return "", err
+		return AuthCodeResult{}, err
 	}
 	at, _ := resp.JSON()["access_token"].(string)
 	if at == "" {
-		return "", fmt.Errorf("token endpoint returned no access_token (HTTP %d)", resp.StatusCode)
+		return AuthCodeResult{}, fmt.Errorf("token endpoint returned no access_token (HTTP %d)", resp.StatusCode)
 	}
-	return at, nil
+	return AuthCodeResult{AccessToken: at, CallbackISS: callbackISS}, nil
 }
 
 func httpClientOrDefault(c *http.Client) *http.Client {

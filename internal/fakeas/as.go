@@ -35,11 +35,25 @@ type Violations struct {
 	AcceptBadSubject         bool // skip subject_token verification (accept garbage)
 	RejectValidDPoP          bool // reject a valid DPoP proof with invalid_dpop_proof
 
+	NoIntrospection    bool // do not advertise/serve introspection_endpoint
+	IntrospectInactive bool // always report active:false (buggy AS)
+
+	NoRevocation bool // do not advertise/serve revocation_endpoint
+	IgnoreRevoke bool // accept the revoke request but keep the token active
+
 	NoRegistration          bool // do not advertise/serve registration_endpoint
 	RegistrationRequiresIAT bool // 401 unless an initial access token is presented
 
 	RequirePAR    bool // advertise require_pushed_authorization_requests
 	NoPAREndpoint bool // advertise require_pushed_authorization_requests but omit the endpoint
+
+	AdvertiseMTLS  bool // advertise tls_client_certificate_bound_access_tokens + aliases
+	IncoherentMTLS bool // advertise the bound flag but omit mtls_endpoint_aliases
+
+	EmitSignedMetadata bool // include a JWT signed_metadata in discovery
+	BadSignedMetadata  bool // sign signed_metadata with a throwaway key (invalid)
+
+	IssParamSupported bool // advertise authorization_response_iss_parameter_supported
 }
 
 // AS is a controllable fake authorization server.
@@ -52,6 +66,7 @@ type AS struct {
 	lastForm       url.Values
 	lastClientAuth string
 	lastPARForm    url.Values
+	revoked        map[string]bool
 }
 
 // LastPARForm returns the form values of the most recent /par request, so tests
@@ -83,13 +98,15 @@ func NewAS(v Violations) *AS {
 	if err != nil {
 		panic(err)
 	}
-	as := &AS{v: v, signer: signer}
+	as := &AS{v: v, signer: signer, revoked: map[string]bool{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/oauth-authorization-server", as.handleDiscovery)
 	mux.HandleFunc("/jwks", as.handleJWKS)
 	mux.HandleFunc("/token", as.handleToken)
 	mux.HandleFunc("/register", as.handleRegister)
 	mux.HandleFunc("/par", as.handlePAR)
+	mux.HandleFunc("/introspect", as.handleIntrospect)
+	mux.HandleFunc("/revoke", as.handleRevoke)
 	as.Server = httptest.NewServer(mux)
 	return as
 }
@@ -143,6 +160,29 @@ func (as *AS) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 		if !as.v.NoPAREndpoint {
 			doc["pushed_authorization_request_endpoint"] = as.URL + "/par"
 		}
+	}
+	if as.v.AdvertiseMTLS || as.v.IncoherentMTLS {
+		doc["tls_client_certificate_bound_access_tokens"] = true
+		if !as.v.IncoherentMTLS {
+			doc["mtls_endpoint_aliases"] = map[string]any{"token_endpoint": as.URL + "/mtls/token"}
+		}
+	}
+	if as.v.EmitSignedMetadata || as.v.BadSignedMetadata {
+		signer := as.signer
+		if as.v.BadSignedMetadata {
+			signer, _ = probe.NewSigner() // different key than jwks_uri serves
+		}
+		sm, _ := signer.SignJWT(map[string]any{"issuer": issuer, "token_endpoint": as.URL + "/token"})
+		doc["signed_metadata"] = sm
+	}
+	if !as.v.NoIntrospection {
+		doc["introspection_endpoint"] = as.URL + "/introspect"
+	}
+	if !as.v.NoRevocation {
+		doc["revocation_endpoint"] = as.URL + "/revoke"
+	}
+	if as.v.IssParamSupported {
+		doc["authorization_response_iss_parameter_supported"] = true
 	}
 	writeJSON(w, 200, doc)
 }
@@ -372,6 +412,34 @@ func (as *AS) handleExchange(w http.ResponseWriter, r *http.Request, dpop bool, 
 		}
 	}
 	writeJSON(w, 200, resp)
+}
+
+func (as *AS) handleIntrospect(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	tok := r.Form.Get("token")
+	_, err := as.signer.Verify(tok)
+	active := err == nil && !as.isRevoked(tok) && !as.v.IntrospectInactive
+	writeJSON(w, 200, map[string]any{"active": active})
+}
+
+func (as *AS) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if !as.v.IgnoreRevoke {
+		as.revoke(r.Form.Get("token"))
+	}
+	w.WriteHeader(200) // RFC 7009 §2.2: 200 regardless
+}
+
+func (as *AS) isRevoked(tok string) bool {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	return as.revoked[tok]
+}
+
+func (as *AS) revoke(tok string) {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	as.revoked[tok] = true
 }
 
 func (as *AS) tokenError(w http.ResponseWriter, code int, errc, desc string) {

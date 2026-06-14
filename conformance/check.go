@@ -166,6 +166,14 @@ type Discovered struct {
 	TokenEndpointAuthMethodsSupported  []string
 	PushedAuthorizationRequestEndpoint string
 	RequirePushedAuthorizationRequests bool
+
+	IntrospectionEndpoint                      string
+	RevocationEndpoint                         string
+	ResponseTypesSupported                     []string
+	AuthorizationResponseIssParameterSupported bool
+	SignedMetadata                             string
+	TLSClientCertificateBoundAccessTokens      bool
+	MTLSEndpointAliases                        map[string]string
 }
 
 func (d Discovered) advertisesTokenExchange() bool {

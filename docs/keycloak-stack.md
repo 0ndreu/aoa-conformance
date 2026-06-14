@@ -265,6 +265,30 @@ read scopes from.
 
 ### Expected non-bugs (Keycloak behavior, not defects)
 
+#### Conformance checks
+
+The discovery-driven checks resolve cleanly here — each is pass or skip, never
+error:
+
+- `oauth21.authorize.response_type_code` (SHOULD): **pass** — Keycloak advertises
+  `code` in `response_types_supported`.
+- `rfc7662.introspect.active` (MAY) and `rfc7009.revoke.honored` (MAY): **pass**
+  when you supply `CLIENT_ID`/`CLIENT_SECRET` (Keycloak serves both
+  `introspection_endpoint` and `revocation_endpoint`); **skip** without a client.
+- `rfc9207.authorize.iss_present` (SHOULD): **pass** under `--auth-code` (Keycloak
+  sets `authorization_response_iss_parameter_supported` and returns `iss` on the
+  callback); **skip** without `--auth-code`.
+- `rfc8414.metadata.signed_metadata_valid` (SHOULD): **skip** — Keycloak does not
+  emit `signed_metadata`. The fake AS covers the pass/fail behavior.
+- `rfc8705.advertise.mtls_bound` (MAY): **skip** unless the realm advertises
+  `tls_client_certificate_bound_access_tokens`; **pass** when the advertisement is
+  coherent (the bound flag plus `mtls_endpoint_aliases`).
+
+The env-gated `integration/keycloak_test.go` asserts none of these error and logs
+each one's status.
+
+#### Known quirks
+
 These show as skip/fail and are correct:
 
 - `rfc8707.token.reflects_audience` (SHOULD): Keycloak doesn't reflect the

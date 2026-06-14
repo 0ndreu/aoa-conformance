@@ -18,11 +18,14 @@ Checks are grouped into two profiles. By default a run includes both.
 
 - RFC 9728 protected resource metadata discovery (the `401` challenge and the
   metadata pointer)
-- RFC 8414 authorization server metadata
+- RFC 8414 authorization server metadata, including `signed_metadata` signature
+  verification against the issuer JWKS when advertised
 - PKCE, RFC 7636 (S256 advertised, `plain` rejected)
 - Resource indicators, RFC 8707 (audience reflected, multiple resources)
 - OAuth 2.1 baseline behavior (token endpoint reachable, correct error shapes,
-  unknown grants rejected)
+  unknown grants rejected, `code` response type advertised)
+- Authorization server issuer identification, RFC 9207 (the callback carries an
+  `iss` matching the issuer when advertised; needs `--auth-code`)
 
 **MCP Agent-Auth Extended** covers the agent-delegation surface:
 
@@ -30,6 +33,11 @@ Checks are grouped into two profiles. By default a run includes both.
   `act` claim handling)
 - DPoP sender-constrained tokens, RFC 9449 (proof accepted, `cnf.jkt` bound,
   nonce challenge, wrong `htu` rejected)
+- Token introspection, RFC 7662 (an issued token introspects as `active`)
+- Token revocation, RFC 7009 (a revoked token becomes inactive, confirmed via
+  introspection)
+- mTLS-bound access tokens, RFC 8705 (the advertisement is coherent — the bound
+  flag is accompanied by `mtls_endpoint_aliases`)
 
 ## Install
 

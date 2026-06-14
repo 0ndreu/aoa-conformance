@@ -51,5 +51,19 @@ func registerOAuth21(r *Registry) {
 				}
 				return Result{Status: StatusPass, Message: "RFC 6749 §5.2 error shape", Evidence: resp.Evidence}
 			}),
+
+		Check{
+			ID: "oauth21.authorize.response_type_code", Profile: ProfileCore, RFC: "OAuth 2.1", Section: "RFC 8414 §2",
+			Severity: SeveritySHOULD, Description: "response_types_supported includes \"code\"",
+			Precondition: func(t *Target) bool { return len(t.Discovered.ResponseTypesSupported) > 0 },
+			Run: func(t *Target) Result {
+				for _, rt := range t.Discovered.ResponseTypesSupported {
+					if rt == "code" {
+						return Result{Status: StatusPass, Message: "code response type advertised"}
+					}
+				}
+				return Result{Status: StatusFail, Message: "response_types_supported does not include code"}
+			},
+		},
 	)
 }

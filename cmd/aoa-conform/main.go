@@ -88,10 +88,6 @@ func run(o options, w io.Writer) int {
 
 	ro := resolveOptionsFrom(o)
 
-	// interactive authorization_code wiring (Decision 5): obtaining a user
-	// token requires the AS endpoints, which only exist after discovery. Run a
-	// discovery-only pass to populate tgt.Discovered, then drive the browser
-	// flow and stash the resulting token as the Tier-2 subject token.
 	if o.AuthCode {
 		ctx := context.Background()
 		if err := discoverInto(ctx, tgt); err != nil {
@@ -101,7 +97,7 @@ func run(o options, w io.Writer) int {
 		plan, _ := conformance.Resolve(ctx, tgt.Client, tgt.Discovered, ro)
 		tgt.Plan = plan
 		defer cleanupRegistration(ctx, tgt)
-		token, err := probe.RunAuthCode(ctx, probe.AuthCodeConfig{
+		res, err := probe.RunAuthCode(ctx, probe.AuthCodeConfig{
 			AuthorizationEndpoint: tgt.Discovered.AuthorizationEndpoint,
 			TokenEndpoint:         tgt.Discovered.TokenEndpoint,
 			ClientID:              plan.ClientID,
@@ -115,14 +111,16 @@ func run(o options, w io.Writer) int {
 			fmt.Fprintln(os.Stderr, "auth-code: interactive flow failed:", err)
 			return 1
 		}
-		tgt.Creds.SubjectToken = token
+		tgt.Creds.SubjectToken = res.AccessToken
 		tgt.Creds.AuthCodeAvailable = true
-		// plan already set; run with ResolveOpts nil so we do not DCR twice.
+		if tgt.Hints == nil {
+			tgt.Hints = map[string]string{}
+		}
+		tgt.Hints["authorize_iss"] = res.CallbackISS
 		rep := (&conformance.Runner{Registry: reg}).Run(tgt)
 		return finish(o, w, rep)
 	}
 
-	// normal path: the Runner resolves the plan after discovery.
 	rep := (&conformance.Runner{Registry: reg, ResolveOpts: &ro}).Run(tgt)
 	defer cleanupRegistration(context.Background(), tgt)
 	return finish(o, w, rep)

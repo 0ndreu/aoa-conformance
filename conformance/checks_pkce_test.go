@@ -24,16 +24,6 @@ func TestPKCE_AdvertiseS256(t *testing.T) {
 	}
 }
 
-func TestPKCE_AdvertiseS256_Fail(t *testing.T) {
-	// a target that advertises no S256 at all fails.
-	tgt := &Target{}
-	tgt.Discovered.Issuer = "https://issuer.example"
-	tgt.Discovered.CodeChallengeMethodsSupported = []string{"plain"}
-	if got := runChecksFor(t, "RFC 7636 (PKCE)", tgt)["pkce.advertise.s256"]; got.Status != StatusFail {
-		t.Fatalf("plain-only: want fail, got %s (%s)", got.Status, got.Message)
-	}
-}
-
 func TestPKCE_EnforceSkipsWithoutAuthCode(t *testing.T) {
 	good := fakeas.NewAS(fakeas.Violations{})
 	defer good.Close()

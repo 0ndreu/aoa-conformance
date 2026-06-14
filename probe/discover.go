@@ -36,6 +36,14 @@ type Discovered struct {
 	TokenEndpointAuthMethodsSupported  []string
 	PushedAuthorizationRequestEndpoint string
 	RequirePushedAuthorizationRequests bool
+
+	IntrospectionEndpoint                      string
+	RevocationEndpoint                         string
+	ResponseTypesSupported                     []string
+	AuthorizationResponseIssParameterSupported bool
+	SignedMetadata                             string
+	TLSClientCertificateBoundAccessTokens      bool
+	MTLSEndpointAliases                        map[string]string
 }
 
 var resourceMetadataRE = regexp.MustCompile(`resource_metadata="([^"]+)"`)
@@ -102,6 +110,13 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 	d.TokenEndpointAuthMethodsSupported = meta.TokenEndpointAuthMethodsSupported
 	d.PushedAuthorizationRequestEndpoint = meta.PushedAuthorizationRequestEndpoint
 	d.RequirePushedAuthorizationRequests = meta.RequirePushedAuthorizationRequests
+	d.IntrospectionEndpoint = meta.IntrospectionEndpoint
+	d.RevocationEndpoint = meta.RevocationEndpoint
+	d.ResponseTypesSupported = meta.ResponseTypesSupported
+	d.AuthorizationResponseIssParameterSupported = meta.AuthorizationResponseIssParameterSupported
+	d.SignedMetadata = meta.SignedMetadata
+	d.TLSClientCertificateBoundAccessTokens = meta.TLSClientCertificateBoundAccessTokens
+	d.MTLSEndpointAliases = meta.MTLSEndpointAliases
 	return d, nil
 }
 
@@ -118,6 +133,14 @@ type asMetadata struct {
 	TokenEndpointAuthMethodsSupported  []string `json:"token_endpoint_auth_methods_supported"`
 	PushedAuthorizationRequestEndpoint string   `json:"pushed_authorization_request_endpoint"`
 	RequirePushedAuthorizationRequests bool     `json:"require_pushed_authorization_requests"`
+
+	IntrospectionEndpoint                      string            `json:"introspection_endpoint"`
+	RevocationEndpoint                         string            `json:"revocation_endpoint"`
+	ResponseTypesSupported                     []string          `json:"response_types_supported"`
+	AuthorizationResponseIssParameterSupported bool              `json:"authorization_response_iss_parameter_supported"`
+	SignedMetadata                             string            `json:"signed_metadata"`
+	TLSClientCertificateBoundAccessTokens      bool              `json:"tls_client_certificate_bound_access_tokens"`
+	MTLSEndpointAliases                        map[string]string `json:"mtls_endpoint_aliases"`
 }
 
 func fetchASMetadata(ctx context.Context, c *http.Client, issuer string) (asMetadata, []byte, error) {

@@ -38,6 +38,10 @@ func DefaultRegistry() *Registry {
 	registerOAuth21(r)
 	registerRFC8693(r)
 	registerDPoP(r)
+	registerRFC8705(r)
+	registerRFC7662(r)
+	registerRFC7009(r)
+	registerRFC9207(r)
 	registerSmoke(r)
 	return r
 }

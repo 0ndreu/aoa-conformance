@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/0ndreu/aoa-conformance/probe"
 )
 
 func registerRFC8414(r *Registry) {
@@ -71,6 +73,21 @@ func registerRFC8414(r *Registry) {
 				}
 				return Result{Status: StatusPass, Message: strings.Join(t.Discovered.GrantTypesSupported, ", ")}
 			}),
+
+		Check{
+			ID: "rfc8414.metadata.signed_metadata_valid", Profile: ProfileCore, RFC: "RFC 8414", Section: "§2.1",
+			Severity: SeveritySHOULD, Description: "signed_metadata JWT verifies against the issuer JWKS",
+			Precondition: func(t *Target) bool {
+				return t.Discovered.SignedMetadata != "" && t.Discovered.JWKSURI != ""
+			},
+			Run: func(t *Target) Result {
+				err := probe.VerifyJWTWithJWKS(t.Context(), t.httpClient(), t.Discovered.SignedMetadata, t.Discovered.JWKSURI)
+				if err != nil {
+					return Result{Status: StatusFail, Message: "signed_metadata invalid: " + err.Error()}
+				}
+				return Result{Status: StatusPass, Message: "signed_metadata signature valid"}
+			},
+		},
 	)
 }
 

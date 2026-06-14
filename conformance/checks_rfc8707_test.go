@@ -17,9 +17,14 @@ func clientTarget(t *testing.T, v fakeas.Violations) *Target {
 }
 
 func TestRFC8707_AcceptsResource(t *testing.T) {
-	tgt := clientTarget(t, fakeas.Violations{})
-	if got := runChecksFor(t, "RFC 8707", tgt)["rfc8707.token.accepts_resource"]; got.Status != StatusPass {
+	good := clientTarget(t, fakeas.Violations{})
+	if got := runChecksFor(t, "RFC 8707", good)["rfc8707.token.accepts_resource"]; got.Status != StatusPass {
 		t.Fatalf("want pass, got %s (%s)", got.Status, got.Message)
+	}
+
+	bad := clientTarget(t, fakeas.Violations{RejectResource: true})
+	if got := runChecksFor(t, "RFC 8707", bad)["rfc8707.token.accepts_resource"]; got.Status != StatusFail {
+		t.Fatalf("resource rejected: want fail, got %s (%s)", got.Status, got.Message)
 	}
 }
 
@@ -36,20 +41,11 @@ func TestRFC8707_ReflectsAudience(t *testing.T) {
 }
 
 func TestRFC8707_MultipleResources(t *testing.T) {
-	tgt := clientTarget(t, fakeas.Violations{})
-	if got := runChecksFor(t, "RFC 8707", tgt)["rfc8707.token.multiple_resources"]; got.Status != StatusPass {
+	good := clientTarget(t, fakeas.Violations{})
+	if got := runChecksFor(t, "RFC 8707", good)["rfc8707.token.multiple_resources"]; got.Status != StatusPass {
 		t.Fatalf("want pass, got %s (%s)", got.Status, got.Message)
 	}
-}
 
-func TestRFC8707_AcceptsResource_Fail(t *testing.T) {
-	bad := clientTarget(t, fakeas.Violations{RejectResource: true})
-	if got := runChecksFor(t, "RFC 8707", bad)["rfc8707.token.accepts_resource"]; got.Status != StatusFail {
-		t.Fatalf("resource rejected: want fail, got %s (%s)", got.Status, got.Message)
-	}
-}
-
-func TestRFC8707_MultipleResources_Fail(t *testing.T) {
 	bad := clientTarget(t, fakeas.Violations{ErrorOnMultipleResources: true})
 	if got := runChecksFor(t, "RFC 8707", bad)["rfc8707.token.multiple_resources"]; got.Status != StatusFail {
 		t.Fatalf("500 on multiple resources: want fail, got %s (%s)", got.Status, got.Message)

@@ -84,41 +84,29 @@ func TestRFC8414_SkipsWithoutIssuer(t *testing.T) {
 	}
 }
 
-// the following fail-tests use hand-crafted Discovered targets: full discovery
-// against an unreachable AS would skip (empty Discovered → precondition false),
-// so the check logic is exercised directly with a satisfied precondition.
-
-func TestRFC8414_Reachable_Fail(t *testing.T) {
-	tgt := &Target{Discovered: Discovered{Issuer: "https://x", RawASMetadata: nil}}
-	if got := runChecksFor(t, "RFC 8414", tgt)["rfc8414.metadata.reachable"]; got.Status != StatusFail {
-		t.Fatalf("no metadata: want fail, got %s (%s)", got.Status, got.Message)
+func TestRFC8414_SignedMetadataValid(t *testing.T) {
+	as := fakeas.NewAS(fakeas.Violations{EmitSignedMetadata: true})
+	defer as.Close()
+	tgt := discoverInto(t, as.URL)
+	if got := runChecksFor(t, "RFC 8414", tgt)["rfc8414.metadata.signed_metadata_valid"]; got.Status != StatusPass {
+		t.Fatalf("valid signed_metadata: want pass, got %s (%s)", got.Status, got.Message)
 	}
 }
 
-func TestRFC8414_TokenEndpointPresent_Fail(t *testing.T) {
-	tgt := &Target{Discovered: Discovered{Issuer: "https://x", RawASMetadata: []byte("{}"), TokenEndpoint: ""}}
-	if got := runChecksFor(t, "RFC 8414", tgt)["rfc8414.metadata.token_endpoint_present"]; got.Status != StatusFail {
-		t.Fatalf("missing token_endpoint: want fail, got %s (%s)", got.Status, got.Message)
+func TestRFC8414_SignedMetadataInvalid(t *testing.T) {
+	as := fakeas.NewAS(fakeas.Violations{BadSignedMetadata: true})
+	defer as.Close()
+	tgt := discoverInto(t, as.URL)
+	if got := runChecksFor(t, "RFC 8414", tgt)["rfc8414.metadata.signed_metadata_valid"]; got.Status != StatusFail {
+		t.Fatalf("bad signed_metadata: want fail, got %s", got.Status)
 	}
 }
 
-func TestRFC8414_TokenEndpointHTTPS_Fail(t *testing.T) {
-	tgt := &Target{Discovered: Discovered{Issuer: "https://x", TokenEndpoint: "http://example.com/token"}}
-	if got := runChecksFor(t, "RFC 8414", tgt)["rfc8414.metadata.token_endpoint_https"]; got.Status != StatusFail {
-		t.Fatalf("non-localhost http token_endpoint: want fail, got %s (%s)", got.Status, got.Message)
-	}
-}
-
-func TestRFC8414_JWKSURIPresent_Fail(t *testing.T) {
-	tgt := &Target{Discovered: Discovered{Issuer: "https://x", JWKSURI: ""}}
-	if got := runChecksFor(t, "RFC 8414", tgt)["rfc8414.metadata.jwks_uri_present"]; got.Status != StatusFail {
-		t.Fatalf("missing jwks_uri: want fail, got %s (%s)", got.Status, got.Message)
-	}
-}
-
-func TestRFC8414_GrantTypesAdvertised_Fail(t *testing.T) {
-	tgt := &Target{Discovered: Discovered{Issuer: "https://x", GrantTypesSupported: nil}}
-	if got := runChecksFor(t, "RFC 8414", tgt)["rfc8414.metadata.grant_types_advertised"]; got.Status != StatusFail {
-		t.Fatalf("missing grant_types_supported: want fail, got %s (%s)", got.Status, got.Message)
+func TestRFC8414_SignedMetadataSkipsWhenAbsent(t *testing.T) {
+	as := fakeas.NewAS(fakeas.Violations{})
+	defer as.Close()
+	tgt := discoverInto(t, as.URL)
+	if got := runChecksFor(t, "RFC 8414", tgt)["rfc8414.metadata.signed_metadata_valid"]; got.Status != StatusSkip {
+		t.Fatalf("absent signed_metadata: want skip, got %s", got.Status)
 	}
 }

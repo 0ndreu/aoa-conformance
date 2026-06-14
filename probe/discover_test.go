@@ -138,5 +138,51 @@ func TestDiscover_PRMPresentationFields(t *testing.T) {
 	}
 }
 
+func TestDiscover_PhaseCMetadataFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/oauth-authorization-server" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{
+			"issuer":"`+issuerOf(r)+`",
+			"token_endpoint":"`+issuerOf(r)+`/token",
+			"jwks_uri":"`+issuerOf(r)+`/jwks",
+			"introspection_endpoint":"`+issuerOf(r)+`/introspect",
+			"revocation_endpoint":"`+issuerOf(r)+`/revoke",
+			"response_types_supported":["code","token"],
+			"authorization_response_iss_parameter_supported":true,
+			"signed_metadata":"eyJ.signed.jwt",
+			"tls_client_certificate_bound_access_tokens":true,
+			"mtls_endpoint_aliases":{"token_endpoint":"`+issuerOf(r)+`/mtls/token"}
+		}`)
+	}))
+	defer srv.Close()
+
+	d, err := Discover(context.Background(), srv.Client(), DiscoverInput{Issuer: srv.URL})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if d.IntrospectionEndpoint == "" || d.RevocationEndpoint == "" {
+		t.Errorf("introspection/revocation = %q/%q", d.IntrospectionEndpoint, d.RevocationEndpoint)
+	}
+	if len(d.ResponseTypesSupported) != 2 {
+		t.Errorf("response_types = %v", d.ResponseTypesSupported)
+	}
+	if !d.AuthorizationResponseIssParameterSupported {
+		t.Errorf("iss param supported = false")
+	}
+	if d.SignedMetadata == "" {
+		t.Errorf("signed_metadata empty")
+	}
+	if !d.TLSClientCertificateBoundAccessTokens {
+		t.Errorf("mtls bound = false")
+	}
+	if d.MTLSEndpointAliases["token_endpoint"] == "" {
+		t.Errorf("mtls aliases = %v", d.MTLSEndpointAliases)
+	}
+}
+
 // issuerOf reconstructs the test server's base URL from the request.
 func issuerOf(r *http.Request) string { return "http://" + r.Host }

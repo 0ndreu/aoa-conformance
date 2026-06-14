@@ -49,7 +49,7 @@ func TestAuthCodeFlowAgainstAutoConsentAS(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	tok, err := RunAuthCode(ctx, AuthCodeConfig{
+	res, err := RunAuthCode(ctx, AuthCodeConfig{
 		AuthorizationEndpoint: as.URL + "/authorize",
 		TokenEndpoint:         as.URL + "/token",
 		ClientID:              "client1",
@@ -62,8 +62,8 @@ func TestAuthCodeFlowAgainstAutoConsentAS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("auth_code: %v", err)
 	}
-	if !strings.Contains(tok, "USER_TOKEN") {
-		t.Fatalf("expected USER_TOKEN, got %q", tok)
+	if !strings.Contains(res.AccessToken, "USER_TOKEN") {
+		t.Fatalf("expected USER_TOKEN, got %q", res.AccessToken)
 	}
 }
 
@@ -106,12 +106,12 @@ func TestRunAuthCode_PushesPARFirst(t *testing.T) {
 			return nil
 		},
 	}
-	tok, err := RunAuthCode(context.Background(), cfg)
+	res, err := RunAuthCode(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("auth code: %v", err)
 	}
-	if tok != "tok" {
-		t.Fatalf("token = %q", tok)
+	if res.AccessToken != "tok" {
+		t.Fatalf("token = %q", res.AccessToken)
 	}
 	if !parHit {
 		t.Fatalf("PAR endpoint was not called")
