@@ -9,7 +9,7 @@ import (
 
 func registerDPoP(r *Registry) {
 	needsDPoP := func(t *Target) bool {
-		return t.Discovered.advertisesDPoP() && t.Creds.hasClient()
+		return t.Discovered.advertisesDPoP() && t.Plan.hasClient()
 	}
 	mk := func(id, section, desc string, sev Severity, pre func(*Target) bool, run func(*Target) Result) Check {
 		return Check{ID: CheckID(id), Profile: ProfileExtended, RFC: "RFC 9449", Section: section,
@@ -159,11 +159,13 @@ func dpopNonceFor(t *Target, key *probe.ProofKey) string {
 }
 
 func dpopPost(t *Target, proof string) (*probe.Response, error) {
-	form := probe.FormString("grant_type", "client_credentials", "client_id", t.Creds.ClientID)
-	if t.Creds.ClientSecret != "" {
-		form.Set("client_secret", t.Creds.ClientSecret)
+	form := probe.FormString("grant_type", "client_credentials")
+	h := t.clientAuth(form)
+	if h == nil {
+		h = http.Header{}
 	}
-	return probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, http.Header{"DPoP": {proof}})
+	h.Set("DPoP", proof)
+	return probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, h)
 }
 
 func cnfJKT(claims map[string]any) string {

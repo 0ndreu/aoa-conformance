@@ -34,9 +34,11 @@ The realm import (`integration/keycloak/realm-export.json`) ships these, so you 
 | Confidential client (the one you authenticate as) | `mcp-conform` / `conform-secret` |
 | Token-exchange gateway client | `mcp-gateway` / `gateway-secret` |
 | Downstream API client (exchange audience) | `downstream-api` / `downstream-secret` |
+| PAR-required client (RFC 9126) | `mcp-par` / `par-secret` (its authorize requests must go through the PAR endpoint) |
 | Test user (for `--auth-code`) | `alice` / `alice` |
-| Redirect URIs on `mcp-conform` | `http://localhost:*`, `https://localhost:*`, `http://127.0.0.1:*` |
+| Redirect URIs on `mcp-conform` and `mcp-par` | `http://localhost:*`, `https://localhost:*`, `http://127.0.0.1:*` |
 | Resource scope | `mcp:read` (an **optional** client scope; advertised in the PRM and requested automatically in `--target` mode) |
+| Anonymous dynamic registration | enabled (the import omits Keycloak's default Trusted Hosts policy), so you can run with no `--client-id` and let the tool register a throwaway client |
 
 The two realm details RFC 8693 token exchange needs (`downstream-api` registered
 as a client, and `mcp-gateway` in `mcp-conform`'s token audience) are baked into
@@ -165,12 +167,54 @@ go run ../../cmd/aoa-conform --target https://localhost:8444/mcp $TLS \
 self-signed Keycloak. Alternatively, supply a pre-obtained user JWT with
 `--subject-token <jwt>`.
 
+### 3d. Let the tool register its own client (RFC 7591 DCR)
+
+Drop `--client-id` and `--client-secret`. This realm allows anonymous dynamic
+registration, so the tool registers a temporary client, runs the
+client-dependent checks with it, and deletes it when the run ends:
+
+```sh
+go run ../../cmd/aoa-conform --issuer https://localhost:8443/realms/mcp $TLS
+```
+
+You should see the resource-indicator and DPoP checks run rather than skip. If
+you later lock the realm down to token-gated registration, pass the initial
+access token with `--registration-token <token>`.
+
+### 3e. Exercise PAR (RFC 9126)
+
+The `mcp-par` client requires pushed authorization requests. Point `--auth-code`
+at it and the tool pushes the request to Keycloak's PAR endpoint before opening
+the browser. Log in as **alice / alice**:
+
+```sh
+go run ../../cmd/aoa-conform --issuer https://localhost:8443/realms/mcp $TLS \
+  --client-id mcp-par --client-secret par-secret --auth-code
+```
+
+A plain authorize request for `mcp-par` (one without a `request_uri`) is rejected
+by Keycloak with `invalid_request`, which is the behavior PAR is meant to enforce.
+
+### 3f. Force the client-auth method
+
+Keycloak advertises both `client_secret_post` and `client_secret_basic`, and the
+tool picks post by default. Pass `--token-auth-method client_secret_basic` to
+send the client credentials in an HTTP Basic header instead:
+
+```sh
+go run ../../cmd/aoa-conform --issuer https://localhost:8443/realms/mcp $TLS \
+  --client-id mcp-conform --client-secret conform-secret \
+  --token-auth-method client_secret_basic
+```
+
 ### Useful flags
 
 - `--profile core|extended`: limit to one profile (default: both)
 - `--format md|json`: scorecard (default) or machine-readable JSON for CI
 - `--present`: complete the loop by presenting the obtained token to the resource server
 - `--scope "mcp:read"`: space-separated scopes to request when obtaining a token (override)
+- `--token-auth-method client_secret_post|client_secret_basic`: force the token-endpoint client auth method (default: read from metadata)
+- `--registration-token <token>`: initial access token for dynamic registration, if the realm requires one
 - `--strict`: treat SHOULD-level violations as failures (changes exit code)
 - `--insecure-skip-verify`: skip TLS verification instead of `--cacert` (dev only)
 

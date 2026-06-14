@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"time"
+
+	"github.com/0ndreu/aoa-conformance/probe"
 )
 
 // CheckID is a dot-namespaced identifier, e.g. "rfc8693.delegation.act_nesting".
@@ -105,6 +108,29 @@ func (c Creds) hasClient() bool {
 }
 func (c Creds) hasSubject() bool { return c.SubjectToken != "" }
 
+// AuthPlan is the single resolved decision set computed once after discovery.
+// Precedence for every field is: explicit CLI value > discovered value >
+// built-in default. Phase B extends it with BearerMethod / DPoPRequired.
+type AuthPlan struct {
+	ClientID     string
+	ClientSecret string
+	Registered   bool // true when we DCR'd an ephemeral client
+
+	TokenAuthMethod string // client_secret_post | client_secret_basic
+
+	UsePAR      bool
+	PAREndpoint string
+
+	Scopes []string
+
+	// RegistrationAccessToken / RegistrationClientURI are set only for a DCR'd
+	// client, to delete it best-effort on exit (RFC 7591 §4).
+	RegistrationAccessToken string
+	RegistrationClientURI   string
+}
+
+func (p AuthPlan) hasClient() bool { return p.ClientID != "" && p.ClientSecret != "" }
+
 // EffectiveScopes resolves which scopes to request when obtaining a token:
 // an explicit --scope value wins, otherwise the scopes the resource advertises
 // in its RFC 9728 PRM scopes_supported are used.
@@ -130,6 +156,11 @@ type Discovered struct {
 	// raw metadata documents, kept for evidence.
 	RawASMetadata []byte
 	RawPRM        []byte
+
+	RegistrationEndpoint               string
+	TokenEndpointAuthMethodsSupported  []string
+	PushedAuthorizationRequestEndpoint string
+	RequirePushedAuthorizationRequests bool
 }
 
 func (d Discovered) advertisesTokenExchange() bool {
@@ -163,6 +194,7 @@ type Target struct {
 
 	Discovered Discovered // resolved during the discovery phase
 	Creds      Creds
+	Plan       AuthPlan // resolved after discovery (see resolve.go)
 
 	ctx context.Context
 }
@@ -180,4 +212,11 @@ func (t *Target) httpClient() *http.Client {
 		return t.Client
 	}
 	return http.DefaultClient
+}
+
+// clientAuth applies the resolved client authentication method to a token
+// request form and returns any headers to merge into the request (e.g. an
+// Authorization: Basic header for client_secret_basic; nil for post).
+func (t *Target) clientAuth(form url.Values) http.Header {
+	return probe.ApplyClientAuth(form, t.Plan.TokenAuthMethod, t.Plan.ClientID, t.Plan.ClientSecret)
 }

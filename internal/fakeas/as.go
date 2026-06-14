@@ -34,6 +34,12 @@ type Violations struct {
 	WidenScope               bool // echo a broader scope than requested
 	AcceptBadSubject         bool // skip subject_token verification (accept garbage)
 	RejectValidDPoP          bool // reject a valid DPoP proof with invalid_dpop_proof
+
+	NoRegistration          bool // do not advertise/serve registration_endpoint
+	RegistrationRequiresIAT bool // 401 unless an initial access token is presented
+
+	RequirePAR    bool // advertise require_pushed_authorization_requests
+	NoPAREndpoint bool // advertise require_pushed_authorization_requests but omit the endpoint
 }
 
 // AS is a controllable fake authorization server.
@@ -42,8 +48,26 @@ type AS struct {
 	v      Violations
 	signer *probe.Signer
 
-	mu       sync.Mutex
-	lastForm url.Values
+	mu             sync.Mutex
+	lastForm       url.Values
+	lastClientAuth string
+	lastPARForm    url.Values
+}
+
+// LastPARForm returns the form values of the most recent /par request, so tests
+// can assert which parameters were pushed.
+func (as *AS) LastPARForm() url.Values {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	return as.lastPARForm
+}
+
+// LastClientAuthMethod reports how the most recent /token request authenticated
+// the client: "client_secret_basic", "client_secret_post", or "" (none).
+func (as *AS) LastClientAuthMethod() string {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	return as.lastClientAuth
 }
 
 // LastTokenForm returns the form values of the most recent /token request, so
@@ -64,6 +88,8 @@ func NewAS(v Violations) *AS {
 	mux.HandleFunc("/.well-known/oauth-authorization-server", as.handleDiscovery)
 	mux.HandleFunc("/jwks", as.handleJWKS)
 	mux.HandleFunc("/token", as.handleToken)
+	mux.HandleFunc("/register", as.handleRegister)
+	mux.HandleFunc("/par", as.handlePAR)
 	as.Server = httptest.NewServer(mux)
 	return as
 }
@@ -108,7 +134,42 @@ func (as *AS) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 	if !as.v.NoDPoP {
 		doc["dpop_signing_alg_values_supported"] = []string{"ES256"}
 	}
+	if !as.v.NoRegistration {
+		doc["registration_endpoint"] = as.URL + "/register"
+	}
+	doc["token_endpoint_auth_methods_supported"] = []string{"client_secret_basic", "client_secret_post"}
+	if as.v.RequirePAR {
+		doc["require_pushed_authorization_requests"] = true
+		if !as.v.NoPAREndpoint {
+			doc["pushed_authorization_request_endpoint"] = as.URL + "/par"
+		}
+	}
 	writeJSON(w, 200, doc)
+}
+
+func (as *AS) handlePAR(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	as.mu.Lock()
+	as.lastPARForm = r.Form
+	as.mu.Unlock()
+	writeJSON(w, 201, map[string]any{
+		"request_uri": "urn:ietf:params:oauth:request_uri:fake-123",
+		"expires_in":  90,
+	})
+}
+
+func (as *AS) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if as.v.RegistrationRequiresIAT && r.Header.Get("Authorization") == "" {
+		as.tokenError(w, 401, "invalid_token", "initial access token required")
+		return
+	}
+	writeJSON(w, 201, map[string]any{
+		"client_id":                  "dcr-client",
+		"client_secret":              "dcr-secret",
+		"registration_access_token":  "rat-123",
+		"registration_client_uri":    as.URL + "/register/dcr-client",
+		"token_endpoint_auth_method": "client_secret_post",
+	})
 }
 
 func (as *AS) handleJWKS(w http.ResponseWriter, _ *http.Request) {
@@ -118,8 +179,15 @@ func (as *AS) handleJWKS(w http.ResponseWriter, _ *http.Request) {
 
 func (as *AS) handleToken(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	method := ""
+	if _, _, ok := r.BasicAuth(); ok {
+		method = "client_secret_basic"
+	} else if r.Form.Get("client_secret") != "" {
+		method = "client_secret_post"
+	}
 	as.mu.Lock()
 	as.lastForm = r.Form
+	as.lastClientAuth = method
 	as.mu.Unlock()
 
 	// DPoP handling (RFC 9449): if a DPoP proof is present, run the nonce

@@ -29,6 +29,11 @@ type Discovered struct {
 	WWWAuthenticate               string
 	RawASMetadata                 []byte
 	RawPRM                        []byte
+
+	RegistrationEndpoint               string
+	TokenEndpointAuthMethodsSupported  []string
+	PushedAuthorizationRequestEndpoint string
+	RequirePushedAuthorizationRequests bool
 }
 
 var resourceMetadataRE = regexp.MustCompile(`resource_metadata="([^"]+)"`)
@@ -87,6 +92,10 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 	d.GrantTypesSupported = meta.GrantTypesSupported
 	d.CodeChallengeMethodsSupported = meta.CodeChallengeMethodsSupported
 	d.DPoPSigningAlgValuesSupported = meta.DPoPSigningAlgValuesSupported
+	d.RegistrationEndpoint = meta.RegistrationEndpoint
+	d.TokenEndpointAuthMethodsSupported = meta.TokenEndpointAuthMethodsSupported
+	d.PushedAuthorizationRequestEndpoint = meta.PushedAuthorizationRequestEndpoint
+	d.RequirePushedAuthorizationRequests = meta.RequirePushedAuthorizationRequests
 	return d, nil
 }
 
@@ -98,6 +107,11 @@ type asMetadata struct {
 	GrantTypesSupported           []string `json:"grant_types_supported"`
 	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
 	DPoPSigningAlgValuesSupported []string `json:"dpop_signing_alg_values_supported"`
+
+	RegistrationEndpoint               string   `json:"registration_endpoint"`
+	TokenEndpointAuthMethodsSupported  []string `json:"token_endpoint_auth_methods_supported"`
+	PushedAuthorizationRequestEndpoint string   `json:"pushed_authorization_request_endpoint"`
+	RequirePushedAuthorizationRequests bool     `json:"require_pushed_authorization_requests"`
 }
 
 func fetchASMetadata(ctx context.Context, c *http.Client, issuer string) (asMetadata, []byte, error) {

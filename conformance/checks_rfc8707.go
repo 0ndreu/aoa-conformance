@@ -10,22 +10,17 @@ func registerRFC8707(r *Registry) {
 	mk := func(id, section, desc string, sev Severity, run func(*Target) Result) Check {
 		return Check{ID: CheckID(id), Profile: ProfileCore, RFC: "RFC 8707", Section: section,
 			Severity: sev, Description: desc,
-			Precondition: func(t *Target) bool { return t.Creds.hasClient() },
+			Precondition: func(t *Target) bool { return t.Plan.hasClient() },
 			Run:          run}
 	}
 
 	ccForm := func(t *Target, resources ...string) (*probe.Response, error) {
-		form := probe.FormString(
-			"grant_type", "client_credentials",
-			"client_id", t.Creds.ClientID,
-		)
-		if t.Creds.ClientSecret != "" {
-			form.Set("client_secret", t.Creds.ClientSecret)
-		}
+		form := probe.FormString("grant_type", "client_credentials")
+		h := t.clientAuth(form)
 		for _, res := range resources {
 			form.Add("resource", res)
 		}
-		return probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, nil)
+		return probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, h)
 	}
 
 	r.Add(

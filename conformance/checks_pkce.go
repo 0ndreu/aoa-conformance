@@ -36,12 +36,9 @@ func registerPKCE(r *Registry) {
 					"code", "downgrade-probe",
 					"code_verifier", "plain-verifier",
 					"code_challenge_method", "plain",
-					"client_id", t.Creds.ClientID,
 				)
-				if t.Creds.ClientSecret != "" {
-					form.Set("client_secret", t.Creds.ClientSecret)
-				}
-				resp, err := probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, nil)
+				h := t.clientAuth(form)
+				resp, err := probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, h)
 				if err != nil {
 					return Result{Status: StatusError, Message: err.Error()}
 				}

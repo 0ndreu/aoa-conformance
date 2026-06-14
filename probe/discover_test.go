@@ -3,6 +3,7 @@ package probe
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -65,3 +66,42 @@ func TestDiscoverFromMCPTargetFollowsPRM(t *testing.T) {
 		t.Fatalf("token endpoint via PRM->AS = %s", d.TokenEndpoint)
 	}
 }
+
+func TestDiscover_PhaseAMetadataFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/oauth-authorization-server" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{
+			"issuer": "`+issuerOf(r)+`",
+			"token_endpoint": "`+issuerOf(r)+`/token",
+			"registration_endpoint": "`+issuerOf(r)+`/register",
+			"token_endpoint_auth_methods_supported": ["client_secret_basic","client_secret_post"],
+			"pushed_authorization_request_endpoint": "`+issuerOf(r)+`/par",
+			"require_pushed_authorization_requests": true
+		}`)
+	}))
+	defer srv.Close()
+
+	d, err := Discover(context.Background(), srv.Client(), DiscoverInput{Issuer: srv.URL})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if d.RegistrationEndpoint != srv.URL+"/register" {
+		t.Errorf("registration_endpoint = %q", d.RegistrationEndpoint)
+	}
+	if len(d.TokenEndpointAuthMethodsSupported) != 2 {
+		t.Errorf("auth methods = %v", d.TokenEndpointAuthMethodsSupported)
+	}
+	if d.PushedAuthorizationRequestEndpoint != srv.URL+"/par" {
+		t.Errorf("PAR endpoint = %q", d.PushedAuthorizationRequestEndpoint)
+	}
+	if !d.RequirePushedAuthorizationRequests {
+		t.Errorf("require_pushed_authorization_requests = false")
+	}
+}
+
+// issuerOf reconstructs the test server's base URL from the request.
+func issuerOf(r *http.Request) string { return "http://" + r.Host }

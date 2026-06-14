@@ -70,6 +70,27 @@ checks skip rather than fail.
   `authorization_code` plus PKCE flow that opens your browser, captures the
   redirect, and uses the resulting token as the subject token.
 
+## How the tool gets a client
+
+You do not always have to bring your own client. After discovery, `aoa-conform`
+works out how to authenticate against the token endpoint and, when it can,
+registers a client for you.
+
+- **Dynamic registration (RFC 7591).** If you skip `--client-id` and the issuer
+  advertises a `registration_endpoint`, the tool registers a temporary client,
+  runs the Tier 1 checks with it, and deletes it when the run ends. Servers that
+  gate registration behind an initial access token accept one via
+  `--registration-token`.
+- **Auth method.** The tool reads `token_endpoint_auth_methods_supported` and
+  uses `client_secret_post` when the server allows it, otherwise
+  `client_secret_basic`. Force a method with `--token-auth-method`.
+- **Pushed authorization requests (RFC 9126).** When you run `--auth-code`
+  against a server that requires PAR, the tool pushes the request to the PAR
+  endpoint first, then opens the browser with the returned `request_uri`.
+
+An explicit `--client-id` always wins: the tool uses your client and does not
+register one.
+
 Example with Tier 1 credentials and JSON output:
 
 ```sh
@@ -95,7 +116,10 @@ aoa-conform --issuer https://issuer.example.com \
 | `--client-id <id>` | Client id (Tier 1). |
 | `--client-secret <secret>` | Client secret (Tier 1). |
 | `--subject-token <jwt>` | User token to exchange (Tier 2). |
-| `--auth-code` | Obtain a user token interactively via `authorization_code` plus PKCE. |
+| `--token-auth-method <method>` | Force the token-endpoint client auth method: `client_secret_post` or `client_secret_basic`. Default is read from server metadata. |
+| `--registration-token <token>` | Initial access token for dynamic client registration, for servers that require one. |
+| `--scope "<scopes>"` | Space-separated scopes to request when obtaining a token. In `--target` mode the tool defaults to the scopes the resource advertises in its PRM. |
+| `--auth-code` | Obtain a user token interactively via `authorization_code` plus PKCE. Uses PAR when the server requires it. |
 | `--present` | Complete the loop: take a token from the AS and present it to the resource server, asserting it is accepted. |
 | `--profile core\|extended` | Limit the run to one profile. Default is both. |
 | `--format md\|json` | Report format. `md` is the human-readable scorecard (default), `json` is for CI and offline audit. |

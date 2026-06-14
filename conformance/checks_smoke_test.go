@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/0ndreu/aoa-conformance/internal/fakeas"
+	"github.com/0ndreu/aoa-conformance/probe"
 )
 
 func TestSmoke_TokenAccepted(t *testing.T) {
@@ -14,8 +15,7 @@ func TestSmoke_TokenAccepted(t *testing.T) {
 
 	tgt := &Target{MCPURL: rs.URL + "/mcp"}
 	(&Runner{Registry: DefaultRegistry()}).Run(tgt) // discovery via PRM -> AS
-	tgt.Creds.ClientID = "test-client"
-	tgt.Creds.ClientSecret = "test-secret"
+	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost}
 	tgt.Creds.PresentEnabled = true
 
 	if got := runChecksFor(t, "MCP loop", tgt)["smoke.present.token_accepted"]; got.Status != StatusPass {
@@ -31,8 +31,7 @@ func TestSmoke_TokenRejected(t *testing.T) {
 
 	tgt := &Target{MCPURL: rs.URL + "/mcp"}
 	(&Runner{Registry: DefaultRegistry()}).Run(tgt)
-	tgt.Creds.ClientID = "test-client"
-	tgt.Creds.ClientSecret = "test-secret"
+	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost}
 	tgt.Creds.PresentEnabled = true
 
 	if got := runChecksFor(t, "MCP loop", tgt)["smoke.present.token_accepted"]; got.Status != StatusFail {
@@ -48,8 +47,7 @@ func TestSmoke_SkipsWithoutPresent(t *testing.T) {
 
 	tgt := &Target{MCPURL: rs.URL + "/mcp"}
 	(&Runner{Registry: DefaultRegistry()}).Run(tgt)
-	tgt.Creds.ClientID = "test-client"
-	tgt.Creds.ClientSecret = "test-secret"
+	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost}
 	// PresentEnabled not set
 
 	if got := runChecksFor(t, "MCP loop", tgt)["smoke.present.token_accepted"]; got.Status != StatusSkip {

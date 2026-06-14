@@ -1,6 +1,37 @@
 {
   "realm": "mcp",
   "enabled": true,
+  "components": {
+    "org.keycloak.services.clientregistration.policy.ClientRegistrationPolicy": [
+      {
+        "name": "Allowed Client Scopes",
+        "providerId": "allowed-client-templates",
+        "subType": "anonymous",
+        "config": { "allow-default-scopes": ["true"] }
+      },
+      {
+        "name": "Max Clients Limit",
+        "providerId": "max-clients",
+        "subType": "anonymous",
+        "config": { "max-clients": ["200"] }
+      },
+      {
+        "name": "Allowed Protocol Mapper Types",
+        "providerId": "allowed-protocol-mappers",
+        "subType": "anonymous",
+        "config": {
+          "allowed-protocol-mapper-types": [
+            "oidc-usermodel-property-mapper",
+            "oidc-usermodel-attribute-mapper",
+            "oidc-address-mapper",
+            "oidc-full-name-mapper",
+            "oidc-sha256-pairwise-sub-mapper",
+            "oidc-audience-mapper"
+          ]
+        }
+      }
+    ]
+  },
   "clientScopes": [
     {
       "name": "mcp:read",
@@ -42,6 +73,20 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "mcp-par",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "par-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:*", "https://localhost:*", "http://127.0.0.1:*"],
+      "optionalClientScopes": ["mcp:read"],
+      "attributes": {
+        "require.pushed.authorization.requests": "true"
+      }
     },
     {
       "clientId": "mcp-gateway",

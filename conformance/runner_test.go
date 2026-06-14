@@ -3,6 +3,8 @@ package conformance
 import (
 	"testing"
 	"time"
+
+	"github.com/0ndreu/aoa-conformance/internal/fakeas"
 )
 
 func TestRunnerRunsAllChecksAndTimesThem(t *testing.T) {
@@ -35,6 +37,28 @@ func TestRunnerRecoversFromPanicAsError(t *testing.T) {
 	rep := (&Runner{Registry: reg, SkipDiscovery: true}).Run(&Target{Issuer: "i"})
 	if rep.Entries[0].Result.Status != StatusError {
 		t.Fatalf("panic should become StatusError, got %s", rep.Entries[0].Result.Status)
+	}
+}
+
+func TestRunner_ResolvesPlanWhenOptsSet(t *testing.T) {
+	as := fakeas.NewAS(fakeas.Violations{})
+	defer as.Close()
+
+	tgt := &Target{Issuer: as.URL}
+	(&Runner{Registry: &Registry{}, ResolveOpts: &ResolveOptions{}}).Run(tgt)
+	if !tgt.Plan.Registered {
+		t.Fatalf("runner should DCR when no client supplied; plan=%+v", tgt.Plan)
+	}
+}
+
+func TestRunner_SkipsResolveWhenOptsNil(t *testing.T) {
+	as := fakeas.NewAS(fakeas.Violations{})
+	defer as.Close()
+
+	tgt := &Target{Issuer: as.URL}
+	(&Runner{Registry: &Registry{}}).Run(tgt)
+	if tgt.Plan.hasClient() || tgt.Plan.Registered {
+		t.Fatalf("nil ResolveOpts must not resolve; plan=%+v", tgt.Plan)
 	}
 }
 

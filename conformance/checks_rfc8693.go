@@ -28,11 +28,8 @@ func registerRFC8693(r *Registry) {
 				form.Add(k, v)
 			}
 		}
-		form.Set("client_id", t.Creds.ClientID)
-		if t.Creds.ClientSecret != "" {
-			form.Set("client_secret", t.Creds.ClientSecret)
-		}
-		return probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, nil)
+		h := t.clientAuth(form)
+		return probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, h)
 	}
 
 	r.Add(

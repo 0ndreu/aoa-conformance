@@ -13,20 +13,18 @@ func registerSmoke(r *Registry) {
 		Severity: SeveritySHOULD, Description: "a token obtained from the AS is accepted by the MCP resource server",
 		Precondition: func(t *Target) bool {
 			return t.MCPURL != "" && t.Creds.PresentEnabled &&
-				(t.Creds.hasSubject() || t.Creds.hasClient())
+				(t.Creds.hasSubject() || t.Plan.hasClient())
 		},
 		Run: func(t *Target) Result {
 			token := t.Creds.SubjectToken
 			if token == "" {
 				// obtain a client_credentials token.
-				form := probe.FormString("grant_type", "client_credentials", "client_id", t.Creds.ClientID)
-				if t.Creds.ClientSecret != "" {
-					form.Set("client_secret", t.Creds.ClientSecret)
-				}
-				if scopes := EffectiveScopes(t.Creds.Scopes, t.Discovered.PRMScopesSupported); len(scopes) > 0 {
+				form := probe.FormString("grant_type", "client_credentials")
+				h := t.clientAuth(form)
+				if scopes := t.Plan.Scopes; len(scopes) > 0 {
 					form.Set("scope", strings.Join(scopes, " "))
 				}
-				resp, err := probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, nil)
+				resp, err := probe.PostForm(t.Context(), t.httpClient(), t.Discovered.TokenEndpoint, form, h)
 				if err != nil {
 					return Result{Status: StatusError, Message: "token request failed: " + err.Error()}
 				}

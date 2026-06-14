@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/0ndreu/aoa-conformance/internal/fakeas"
+	"github.com/0ndreu/aoa-conformance/probe"
 )
 
 func clientTarget(t *testing.T, v fakeas.Violations) *Target {
@@ -11,8 +12,7 @@ func clientTarget(t *testing.T, v fakeas.Violations) *Target {
 	as := fakeas.NewAS(v)
 	t.Cleanup(as.Close)
 	tgt := discoverInto(t, as.URL)
-	tgt.Creds.ClientID = "test-client"
-	tgt.Creds.ClientSecret = "test-secret"
+	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost}
 	return tgt
 }
 

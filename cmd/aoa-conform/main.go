@@ -30,6 +30,9 @@ type options struct {
 	AuthCode     bool
 	CACert       string
 	Insecure     bool
+
+	TokenAuthMethod   string
+	RegistrationToken string
 }
 
 func main() {
@@ -47,6 +50,8 @@ func main() {
 	flag.BoolVar(&o.AuthCode, "auth-code", false, "obtain a user token interactively (authorization_code + PKCE)")
 	flag.StringVar(&o.CACert, "cacert", "", "PEM file of CA(s) to trust for TLS (e.g. a dev self-signed cert)")
 	flag.BoolVar(&o.Insecure, "insecure-skip-verify", false, "skip TLS certificate verification (dev only)")
+	flag.StringVar(&o.TokenAuthMethod, "token-auth-method", "", "override token-endpoint auth method: client_secret_post | client_secret_basic")
+	flag.StringVar(&o.RegistrationToken, "registration-token", "", "RFC 7591 initial access token for dynamic client registration")
 	flag.Parse()
 
 	if o.Target == "" && o.Issuer == "" {
@@ -75,12 +80,13 @@ func run(o options, w io.Writer) int {
 		Issuer: o.Issuer,
 		Client: client,
 		Creds: conformance.Creds{
-			ClientID: o.ClientID, ClientSecret: o.ClientSecret, UsePostAuth: true,
 			SubjectToken:   o.SubjectToken,
 			Scopes:         splitScopes(o.Scope),
 			PresentEnabled: o.Present,
 		},
 	}
+
+	ro := resolveOptionsFrom(o)
 
 	// interactive authorization_code wiring (Decision 5): obtaining a user
 	// token requires the AS endpoints, which only exist after discovery. Run a
@@ -92,12 +98,17 @@ func run(o options, w io.Writer) int {
 			fmt.Fprintln(os.Stderr, "auth-code: discovery failed:", err)
 			return 1
 		}
+		plan, _ := conformance.Resolve(ctx, tgt.Client, tgt.Discovered, ro)
+		tgt.Plan = plan
+		defer cleanupRegistration(ctx, tgt)
 		token, err := probe.RunAuthCode(ctx, probe.AuthCodeConfig{
 			AuthorizationEndpoint: tgt.Discovered.AuthorizationEndpoint,
 			TokenEndpoint:         tgt.Discovered.TokenEndpoint,
-			ClientID:              o.ClientID,
-			ClientSecret:          o.ClientSecret,
-			Scopes:                conformance.EffectiveScopes(splitScopes(o.Scope), tgt.Discovered.PRMScopesSupported),
+			ClientID:              plan.ClientID,
+			ClientSecret:          plan.ClientSecret,
+			Scopes:                plan.Scopes,
+			UsePAR:                plan.UsePAR,
+			PAREndpoint:           plan.PAREndpoint,
 			HTTPClient:            tgt.Client,
 		})
 		if err != nil {
@@ -106,22 +117,29 @@ func run(o options, w io.Writer) int {
 		}
 		tgt.Creds.SubjectToken = token
 		tgt.Creds.AuthCodeAvailable = true
+		// plan already set; run with ResolveOpts nil so we do not DCR twice.
+		rep := (&conformance.Runner{Registry: reg}).Run(tgt)
+		return finish(o, w, rep)
 	}
 
-	rep := (&conformance.Runner{Registry: reg}).Run(tgt)
+	// normal path: the Runner resolves the plan after discovery.
+	rep := (&conformance.Runner{Registry: reg, ResolveOpts: &ro}).Run(tgt)
+	defer cleanupRegistration(context.Background(), tgt)
+	return finish(o, w, rep)
+}
 
-	var rep2err error
+func finish(o options, w io.Writer, rep conformance.Report) int {
+	var err error
 	switch o.Format {
 	case "json":
-		rep2err = (conformance.JSONReporter{}).Write(w, rep)
+		err = (conformance.JSONReporter{}).Write(w, rep)
 	default:
-		rep2err = (conformance.MarkdownReporter{}).Write(w, rep)
+		err = (conformance.MarkdownReporter{}).Write(w, rep)
 	}
-	if rep2err != nil {
-		fmt.Fprintln(os.Stderr, "report error:", rep2err)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "report error:", err)
 		return 1
 	}
-
 	s := rep.Summarize()
 	if s.Fail > 0 || s.Error > 0 {
 		return 1
@@ -130,6 +148,27 @@ func run(o options, w io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// resolveOptionsFrom maps the CLI options into resolver inputs.
+func resolveOptionsFrom(o options) conformance.ResolveOptions {
+	return conformance.ResolveOptions{
+		ClientID:          o.ClientID,
+		ClientSecret:      o.ClientSecret,
+		TokenAuthMethod:   o.TokenAuthMethod,
+		RegistrationToken: o.RegistrationToken,
+		Scopes:            splitScopes(o.Scope),
+	}
+}
+
+// cleanupRegistration best-effort deletes a DCR'd ephemeral client (RFC 7591 §4).
+func cleanupRegistration(ctx context.Context, tgt *conformance.Target) {
+	if !tgt.Plan.Registered || tgt.Plan.RegistrationClientURI == "" {
+		return
+	}
+	if err := probe.DeleteRegistration(ctx, tgt.Client, tgt.Plan.RegistrationClientURI, tgt.Plan.RegistrationAccessToken); err != nil {
+		fmt.Fprintln(os.Stderr, "cleanup: could not delete ephemeral client:", err)
+	}
 }
 
 // discoverInto runs a discovery-only pass so the interactive auth-code flow can

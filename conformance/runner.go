@@ -12,6 +12,10 @@ import (
 type Runner struct {
 	Registry      *Registry
 	SkipDiscovery bool
+	// ResolveOpts, when non-nil, makes Run compute Target.Plan after discovery.
+	// CLI callers that resolve themselves (e.g. the --auth-code pre-step) leave
+	// it nil and set Target.Plan directly.
+	ResolveOpts *ResolveOptions
 }
 
 func (r *Runner) Run(t *Target) Report {
@@ -30,6 +34,11 @@ func (r *Runner) Run(t *Target) Report {
 				Result: Result{Status: StatusError, Message: fmt.Sprintf("discovery failed: %v", err)},
 			})
 		}
+	}
+
+	if r.ResolveOpts != nil {
+		plan, _ := Resolve(t.Context(), t.httpClient(), t.Discovered, *r.ResolveOpts)
+		t.Plan = plan
 	}
 
 	for _, c := range r.Registry.Checks() {
@@ -73,6 +82,11 @@ func (r *Runner) discover(t *Target) error {
 			PRMScopesSupported:            d.PRMScopesSupported,
 			RawASMetadata:                 d.RawASMetadata,
 			RawPRM:                        d.RawPRM,
+
+			RegistrationEndpoint:               d.RegistrationEndpoint,
+			TokenEndpointAuthMethodsSupported:  d.TokenEndpointAuthMethodsSupported,
+			PushedAuthorizationRequestEndpoint: d.PushedAuthorizationRequestEndpoint,
+			RequirePushedAuthorizationRequests: d.RequirePushedAuthorizationRequests,
 		}
 		if t.Hints == nil {
 			t.Hints = map[string]string{}

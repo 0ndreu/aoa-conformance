@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"runtime"
 
@@ -35,6 +36,9 @@ type AuthCodeConfig struct {
 	// HTTPClient is used for the code-for-token exchange. nil ⇒ http.DefaultClient.
 	HTTPClient *http.Client
 
+	UsePAR      bool
+	PAREndpoint string
+
 	openBrowser func(string) error // injected in tests; defaults to the OS opener
 }
 
@@ -59,9 +63,43 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
 	}
 	verifier, challenge := NewPKCE()
 	state := randHex(16)
-	authURL := oc.AuthCodeURL(state,
-		oauth2.SetAuthURLParam("code_challenge", challenge),
-		oauth2.SetAuthURLParam("code_challenge_method", "S256"))
+
+	var authURL string
+	if cfg.UsePAR {
+		if cfg.PAREndpoint == "" {
+			return "", errors.New("PAR required but no pushed_authorization_request_endpoint advertised")
+		}
+		parForm := FormString(
+			"client_id", cfg.ClientID,
+			"response_type", "code",
+			"redirect_uri", redirectURI,
+			"scope", joinSpace(cfg.Scopes),
+			"state", state,
+			"code_challenge", challenge,
+			"code_challenge_method", "S256",
+		)
+		if cfg.ClientSecret != "" {
+			parForm.Set("client_secret", cfg.ClientSecret)
+		}
+		resp, err := PostForm(ctx, httpClientOrDefault(cfg.HTTPClient), cfg.PAREndpoint, parForm, nil)
+		if err != nil {
+			return "", fmt.Errorf("PAR push failed: %w", err)
+		}
+		requestURI, _ := resp.JSON()["request_uri"].(string)
+		if requestURI == "" {
+			return "", fmt.Errorf("PAR endpoint returned no request_uri (HTTP %d)", resp.StatusCode)
+		}
+		// per RFC 9126 the authorize request carries only client_id +
+		// request_uri; redirect_uri and state are included here so the
+		// localhost callback can correlate the redirect.
+		authURL = fmt.Sprintf("%s?client_id=%s&request_uri=%s&redirect_uri=%s&state=%s",
+			cfg.AuthorizationEndpoint, url.QueryEscape(cfg.ClientID), url.QueryEscape(requestURI),
+			url.QueryEscape(redirectURI), url.QueryEscape(state))
+	} else {
+		authURL = oc.AuthCodeURL(state,
+			oauth2.SetAuthURLParam("code_challenge", challenge),
+			oauth2.SetAuthURLParam("code_challenge_method", "S256"))
+	}
 
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
@@ -124,6 +162,13 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (string, error) {
 		return "", fmt.Errorf("token endpoint returned no access_token (HTTP %d)", resp.StatusCode)
 	}
 	return at, nil
+}
+
+func httpClientOrDefault(c *http.Client) *http.Client {
+	if c == nil {
+		return http.DefaultClient
+	}
+	return c
 }
 
 func openInBrowser(u string) error {

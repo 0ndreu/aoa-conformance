@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/0ndreu/aoa-conformance/internal/fakeas"
+	"github.com/0ndreu/aoa-conformance/probe"
 )
 
 func exchangeTarget(t *testing.T, v fakeas.Violations, subjectClaims, actorClaims map[string]any) *Target {
@@ -12,8 +13,7 @@ func exchangeTarget(t *testing.T, v fakeas.Violations, subjectClaims, actorClaim
 	t.Cleanup(as.Close)
 	tgt := &Target{Issuer: as.URL}
 	(&Runner{Registry: DefaultRegistry()}).Run(tgt) // discovery
-	tgt.Creds.ClientID = "test-client"
-	tgt.Creds.ClientSecret = "test-secret"
+	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost}
 	tgt.Creds.SubjectToken = as.MintToken(subjectClaims)
 	if actorClaims != nil {
 		if tgt.Hints == nil {

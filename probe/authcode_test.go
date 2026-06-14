@@ -3,8 +3,10 @@ package probe
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -62,5 +64,62 @@ func TestAuthCodeFlowAgainstAutoConsentAS(t *testing.T) {
 	}
 	if !strings.Contains(tok, "USER_TOKEN") {
 		t.Fatalf("expected USER_TOKEN, got %q", tok)
+	}
+}
+
+func TestRunAuthCode_PushesPARFirst(t *testing.T) {
+	var parHit bool
+	var authQuery url.Values
+	mux := http.NewServeMux()
+	mux.HandleFunc("/par", func(w http.ResponseWriter, r *http.Request) {
+		parHit = true
+		_ = r.ParseForm()
+		if r.Form.Get("code_challenge") == "" {
+			t.Errorf("PAR body missing PKCE challenge")
+		}
+		w.WriteHeader(201)
+		_, _ = io.WriteString(w, `{"request_uri":"urn:fake:1","expires_in":90}`)
+	})
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"tok"}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := AuthCodeConfig{
+		AuthorizationEndpoint: srv.URL + "/authorize",
+		TokenEndpoint:         srv.URL + "/token",
+		PAREndpoint:           srv.URL + "/par",
+		UsePAR:                true,
+		ClientID:              "cid",
+		HTTPClient:            srv.Client(),
+		openBrowser: func(u string) error {
+			parsed, _ := url.Parse(u)
+			authQuery = parsed.Query()
+			// simulate the AS redirecting back with a code.
+			go func() {
+				cb := authQuery.Get("redirect_uri")
+				st := authQuery.Get("state")
+				http.Get(cb + "?state=" + st + "&code=xyz")
+			}()
+			return nil
+		},
+	}
+	tok, err := RunAuthCode(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("auth code: %v", err)
+	}
+	if tok != "tok" {
+		t.Fatalf("token = %q", tok)
+	}
+	if !parHit {
+		t.Fatalf("PAR endpoint was not called")
+	}
+	if authQuery.Get("request_uri") != "urn:fake:1" {
+		t.Fatalf("authorize URL missing request_uri: %v", authQuery)
+	}
+	if authQuery.Get("code_challenge") != "" {
+		t.Fatalf("with PAR, params must not be in the authorize URL: %v", authQuery)
 	}
 }
