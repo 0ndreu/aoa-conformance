@@ -1,0 +1,32 @@
+server:
+  addr: ":8444"
+  resource: "https://localhost:8444/mcp"
+  tls:
+    cert: "../keycloak/tls/server.crt"
+    key: "../keycloak/tls/server.key"
+
+active_provider: keycloak          # override with --provider or $MCP_PROVIDER
+
+providers:
+  keycloak:
+    issuer: https://localhost:8443/realms/mcp
+    audience: [mcp-api]
+    required_scopes: [mcp:read]
+    dpop: optional
+    exchange:
+      client_id: mcp-gateway
+      client_secret: ${KC_GATEWAY_SECRET}
+  hydra:
+    issuer: https://localhost:4444/
+    audience: [mcp-api]
+    required_scopes: [mcp:read]
+    dpop: optional
+  okta:
+    issuer: https://dev-xxxxx.okta.com/oauth2/ausXXXXXXXX
+    audience: ["api://mcp"]
+    required_scopes: [mcp:read]
+    dpop: off
+
+downstream:
+  url: https://localhost:8444/data
+  audience: [downstream-api]

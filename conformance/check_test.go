@@ -1,0 +1,44 @@
+package conformance
+
+import "testing"
+
+func TestStatusAndSeverityConstants(t *testing.T) {
+	if StatusPass != "pass" || StatusFail != "fail" || StatusSkip != "skip" || StatusError != "error" {
+		t.Fatal("status constant values changed; locked schema requires these strings")
+	}
+	if SeverityMUST != "MUST" || SeveritySHOULD != "SHOULD" || SeverityMAY != "MAY" {
+		t.Fatal("severity constant values changed")
+	}
+	if ProfileCore != "mcp-core" || ProfileExtended != "mcp-agent-auth-extended" {
+		t.Fatal("profile constant values changed")
+	}
+}
+
+func TestCheckSkipsWhenPreconditionFalse(t *testing.T) {
+	c := Check{
+		ID:           "test.always_skip",
+		Precondition: func(*Target) bool { return false },
+		Run:          func(_ *Target) Result { return Result{Status: StatusPass} },
+	}
+	if got := c.Evaluate(&Target{}); got.Status != StatusSkip {
+		t.Fatalf("want skip when precondition false, got %s", got.Status)
+	}
+}
+
+func TestCheckRunsWhenPreconditionTrue(t *testing.T) {
+	c := Check{
+		ID:           "test.runs",
+		Precondition: func(*Target) bool { return true },
+		Run:          func(_ *Target) Result { return Result{Status: StatusFail, Message: "boom"} },
+	}
+	if got := c.Evaluate(&Target{}); got.Status != StatusFail || got.Message != "boom" {
+		t.Fatalf("want fail/boom, got %s/%s", got.Status, got.Message)
+	}
+}
+
+func TestCheckNilPreconditionAlwaysRuns(t *testing.T) {
+	c := Check{ID: "test.no_precond", Run: func(*Target) Result { return Result{Status: StatusPass} }}
+	if got := c.Evaluate(&Target{}); got.Status != StatusPass {
+		t.Fatalf("nil precondition should run; got %s", got.Status)
+	}
+}

@@ -1,0 +1,64 @@
+package fakeas
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+// RSViolations toggles resource-server discovery violations.
+type RSViolations struct {
+	OmitChallenge            bool // 401 without WWW-Authenticate resource_metadata
+	OmitAuthorizationServers bool // PRM without authorization_servers
+	AcceptAnyToken           bool // /mcp returns 200 for the --present smoke test
+	MalformedPRM             bool // PRM document is invalid non-JSON
+	UnresolvableAuthServer   bool // PRM lists an authorization server that does not resolve
+}
+
+// RS is a fake MCP resource server: it emits the 401 + RFC 9728 PRM pointing at
+// the given authorization server. It is intentionally hand-rolled (not aoa) so
+// broken variants are possible; the real-aoa version lives in dogfood_test.go.
+type RS struct {
+	*httptest.Server
+	asURL string
+	v     RSViolations
+}
+
+func NewRS(asURL string, v RSViolations) *RS {
+	rs := &RS{asURL: asURL, v: v}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/oauth-protected-resource", rs.handlePRM)
+	mux.HandleFunc("/mcp", rs.handleMCP)
+	rs.Server = httptest.NewServer(mux)
+	return rs
+}
+
+func (rs *RS) handlePRM(w http.ResponseWriter, _ *http.Request) {
+	if rs.v.MalformedPRM {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("not json"))
+		return
+	}
+	doc := map[string]any{"resource": rs.URL}
+	if !rs.v.OmitAuthorizationServers {
+		as := rs.asURL
+		if rs.v.UnresolvableAuthServer {
+			as = "http://127.0.0.1:1" // closed port → RFC 8414 fetch yields no metadata
+		}
+		doc["authorization_servers"] = []string{as}
+	}
+	writeJSON(w, 200, doc)
+}
+
+func (rs *RS) handleMCP(w http.ResponseWriter, r *http.Request) {
+	if rs.v.AcceptAnyToken && r.Header.Get("Authorization") != "" {
+		writeJSON(w, 200, map[string]any{"ok": true})
+		return
+	}
+	if !rs.v.OmitChallenge {
+		w.Header().Set("WWW-Authenticate",
+			fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource"`, rs.URL))
+	}
+	w.WriteHeader(401)
+}

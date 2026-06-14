@@ -1,0 +1,15 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: ["start-dev", "--features=token-exchange,dpop", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: localhost
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/tls/server.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/tls/server.key
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./keycloak/tls:/opt/keycloak/conf/tls:ro
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
