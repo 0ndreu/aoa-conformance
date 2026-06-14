@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 )
 
 // RSViolations toggles resource-server discovery violations.
@@ -23,6 +24,11 @@ type RS struct {
 	asURL  string
 	v      RSViolations
 	Scopes []string // advertised in PRM scopes_supported (set before use)
+
+	BearerMethods       []string // advertised in PRM bearer_methods_supported
+	RequireBearerMethod string   // "" = accept any; else header|body|query
+	RequireDPoP         bool     // advertise + enforce DPoP-bound presentation
+	InsufficientScope   bool     // present path returns 403 instead of 200
 }
 
 func NewRS(asURL string, v RSViolations) *RS {
@@ -52,6 +58,12 @@ func (rs *RS) handlePRM(w http.ResponseWriter, _ *http.Request) {
 	if len(rs.Scopes) > 0 {
 		doc["scopes_supported"] = rs.Scopes
 	}
+	if len(rs.BearerMethods) > 0 {
+		doc["bearer_methods_supported"] = rs.BearerMethods
+	}
+	if rs.RequireDPoP {
+		doc["dpop_bound_access_tokens_required"] = true
+	}
 	writeJSON(w, 200, doc)
 }
 
@@ -60,9 +72,51 @@ func (rs *RS) handleMCP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"ok": true})
 		return
 	}
+	if rs.serves() && rs.extractToken(r) {
+		if rs.RequireDPoP && (r.Header.Get("DPoP") == "" || !strings.HasPrefix(r.Header.Get("Authorization"), "DPoP ")) {
+			rs.challenge(w, 401)
+			return
+		}
+		if rs.InsufficientScope {
+			w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
+			w.WriteHeader(403)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true})
+		return
+	}
+	rs.challenge(w, 401)
+}
+
+// serves reports whether this RS is configured to behave like a working
+// resource. An unconfigured RS rejects every request with 401.
+func (rs *RS) serves() bool {
+	return rs.RequireBearerMethod != "" || len(rs.BearerMethods) > 0 || rs.RequireDPoP || rs.InsufficientScope
+}
+
+// extractToken reports whether a token was presented by the method this RS
+// requires (or by any method when RequireBearerMethod is "").
+func (rs *RS) extractToken(r *http.Request) bool {
+	hasHeader := r.Header.Get("Authorization") != ""
+	_ = r.ParseForm()
+	hasBody := r.PostForm.Get("access_token") != ""
+	hasQuery := r.URL.Query().Get("access_token") != ""
+	switch rs.RequireBearerMethod {
+	case "header":
+		return hasHeader
+	case "body":
+		return hasBody
+	case "query":
+		return hasQuery
+	default:
+		return hasHeader || hasBody || hasQuery
+	}
+}
+
+func (rs *RS) challenge(w http.ResponseWriter, code int) {
 	if !rs.v.OmitChallenge {
 		w.Header().Set("WWW-Authenticate",
 			fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource"`, rs.URL))
 	}
-	w.WriteHeader(401)
+	w.WriteHeader(code)
 }

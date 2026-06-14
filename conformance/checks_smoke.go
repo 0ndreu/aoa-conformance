@@ -1,7 +1,7 @@
 package conformance
 
 import (
-	"net/http"
+	"fmt"
 	"strings"
 
 	"github.com/0ndreu/aoa-conformance/probe"
@@ -37,16 +37,46 @@ func registerSmoke(r *Registry) {
 				return Result{Status: StatusSkip, Message: "no token obtainable"}
 			}
 
-			resp, err := probe.GetWithHeaders(t.Context(), t.httpClient(), t.MCPURL, http.Header{
-				"Authorization": {"Bearer " + token},
-			})
+			var dpopKey *probe.ProofKey
+			if t.Plan.DPoPRequired {
+				k, err := probe.NewProofKey()
+				if err != nil {
+					return Result{Status: StatusError, Message: "dpop key: " + err.Error()}
+				}
+				dpopKey = k
+			}
+
+			resp, err := presentWithRetry(t, token, dpopKey)
 			if err != nil {
 				return Result{Status: StatusError, Message: "presenting token failed: " + err.Error()}
 			}
-			if resp.StatusCode == 401 {
-				return Result{Status: StatusFail, Message: "resource server rejected the obtained token (401)", Evidence: resp.Evidence}
+			switch resp.StatusCode {
+			case 401:
+				return Result{Status: StatusFail, Message: "resource server rejected the token (401)", Evidence: resp.Evidence}
+			case 403:
+				return Result{Status: StatusFail, Message: "token authenticated but lacks required scope (403)", Evidence: resp.Evidence}
+			}
+			if resp.StatusCode >= 400 {
+				return Result{Status: StatusFail, Message: fmt.Sprintf("resource server returned HTTP %d", resp.StatusCode), Evidence: resp.Evidence}
 			}
 			return Result{Status: StatusPass, Message: "token accepted by resource server", Evidence: resp.Evidence}
 		},
 	})
+}
+
+// presentWithRetry presents the token to the resource and retries once when the
+// resource answers a DPoP request with a use_dpop_nonce challenge.
+func presentWithRetry(t *Target, token string, key *probe.ProofKey) (*probe.Response, error) {
+	in := probe.PresentInput{ResourceURL: t.MCPURL, Token: token, Method: t.Plan.BearerMethod, DPoP: key}
+	resp, err := probe.PresentToken(t.Context(), t.httpClient(), in)
+	if err != nil {
+		return nil, err
+	}
+	if key != nil && resp.StatusCode == 401 {
+		if nonce := resp.Header.Get("DPoP-Nonce"); nonce != "" {
+			in.DPoPNonce = nonce
+			return probe.PresentToken(t.Context(), t.httpClient(), in)
+		}
+	}
+	return resp, nil
 }

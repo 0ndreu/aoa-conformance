@@ -67,7 +67,7 @@ func TestDiscoverFromMCPTargetFollowsPRM(t *testing.T) {
 	}
 }
 
-func TestDiscover_PhaseAMetadataFields(t *testing.T) {
+func TestDiscover_MetadataFields(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/.well-known/oauth-authorization-server" {
 			http.NotFound(w, r)
@@ -100,6 +100,41 @@ func TestDiscover_PhaseAMetadataFields(t *testing.T) {
 	}
 	if !d.RequirePushedAuthorizationRequests {
 		t.Errorf("require_pushed_authorization_requests = false")
+	}
+}
+
+func TestDiscover_PRMPresentationFields(t *testing.T) {
+	as := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/oauth-authorization-server" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"issuer":"`+issuerOf(r)+`","token_endpoint":"`+issuerOf(r)+`/token"}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer as.Close()
+
+	rs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/mcp":
+			w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+issuerOf(r)+`/.well-known/oauth-protected-resource"`)
+			w.WriteHeader(401)
+		case "/.well-known/oauth-protected-resource":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"resource":"`+issuerOf(r)+`","authorization_servers":["`+as.URL+`"],"bearer_methods_supported":["body","header"],"dpop_bound_access_tokens_required":true}`)
+		}
+	}))
+	defer rs.Close()
+
+	d, err := Discover(context.Background(), rs.Client(), DiscoverInput{MCPURL: rs.URL + "/mcp"})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(d.PRMBearerMethodsSupported) != 2 || d.PRMBearerMethodsSupported[0] != "body" {
+		t.Errorf("bearer methods = %v", d.PRMBearerMethodsSupported)
+	}
+	if !d.PRMDPoPBoundAccessTokensRequired {
+		t.Errorf("dpop_bound_access_tokens_required = false")
 	}
 }
 

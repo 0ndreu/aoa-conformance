@@ -29,6 +29,15 @@ func resolveTokenAuthMethod(explicit string, advertised []string) string {
 	return probe.AuthClientSecretPost
 }
 
+// resolveBearerMethod picks how to present the token to the resource: the first
+// advertised method, defaulting to "header" (RFC 6750 §2.1).
+func resolveBearerMethod(advertised []string) string {
+	if len(advertised) > 0 {
+		return advertised[0]
+	}
+	return "header"
+}
+
 // ResolveOptions carries the explicit (CLI) inputs to resolution.
 type ResolveOptions struct {
 	ClientID          string
@@ -55,6 +64,8 @@ func Resolve(ctx context.Context, client *http.Client, d Discovered, opts Resolv
 		UsePAR:          d.RequirePushedAuthorizationRequests,
 		PAREndpoint:     d.PushedAuthorizationRequestEndpoint,
 	}
+	plan.BearerMethod = resolveBearerMethod(d.PRMBearerMethodsSupported)
+	plan.DPoPRequired = d.PRMDPoPBoundAccessTokensRequired
 
 	// only register a client when none was supplied and the AS advertises a
 	// registration endpoint.

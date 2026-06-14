@@ -57,10 +57,16 @@ go run ../../cmd/aoa-conform --target https://localhost:8444/mcp $TLS \
   the self-signed Keycloak).
 
 ## Switching providers
-Set `active_provider: hydra|okta` in `config.yaml` (or `--provider`/`$MCP_PROVIDER`)
-and point that profile's `issuer` at your own Hydra/Okta instance. One active
-provider per run (`aoa` binds one issuer per guard). Only Keycloak is shipped in
-docker-compose; Hydra/Okta you supply.
+Set `active_provider: keycloak-dpop|hydra|okta` in `config.yaml` (or
+`--provider`/`$MCP_PROVIDER`) and point that profile's `issuer` at your own
+instance. The `keycloak-dpop` profile reuses the Keycloak realm but sets
+`dpop: required`, so the PRM advertises `dpop_bound_access_tokens_required` and
+the server rejects a plain Bearer token; use it to exercise DPoP-bound `--present`.
+One active provider per run (`aoa` binds one issuer per guard). Only Keycloak is
+shipped in docker-compose; Hydra/Okta you supply.
+
+Each profile may set `bearer_methods` (advertised in the PRM as
+`bearer_methods_supported`); it defaults to `[header]` when unset.
 
 ## Expected non-bugs
 These `skip`/`fail` results are the provider's behavior, not defects in the server:

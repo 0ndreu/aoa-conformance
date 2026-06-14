@@ -120,7 +120,7 @@ aoa-conform --issuer https://issuer.example.com \
 | `--registration-token <token>` | Initial access token for dynamic client registration, for servers that require one. |
 | `--scope "<scopes>"` | Space-separated scopes to request when obtaining a token. In `--target` mode the tool defaults to the scopes the resource advertises in its PRM. |
 | `--auth-code` | Obtain a user token interactively via `authorization_code` plus PKCE. Uses PAR when the server requires it. |
-| `--present` | Complete the loop: take a token from the AS and present it to the resource server, asserting it is accepted. |
+| `--present` | Complete the loop: take a token from the AS and present it to the resource server, asserting it is accepted. The token is presented by the method the resource advertises in its PRM `bearer_methods_supported` (`header`, `body`, or `query`; default `header`), and is DPoP-bound when the PRM sets `dpop_bound_access_tokens_required`. A `403` (the token authenticates but lacks the required scope) counts as a failure. |
 | `--profile core\|extended` | Limit the run to one profile. Default is both. |
 | `--format md\|json` | Report format. `md` is the human-readable scorecard (default), `json` is for CI and offline audit. |
 | `--strict` | Treat SHOULD-level violations as failures. Changes the exit code, not the report. |

@@ -110,7 +110,7 @@ func (c Creds) hasSubject() bool { return c.SubjectToken != "" }
 
 // AuthPlan is the single resolved decision set computed once after discovery.
 // Precedence for every field is: explicit CLI value > discovered value >
-// built-in default. Phase B extends it with BearerMethod / DPoPRequired.
+// built-in default.
 type AuthPlan struct {
 	ClientID     string
 	ClientSecret string
@@ -122,6 +122,9 @@ type AuthPlan struct {
 	PAREndpoint string
 
 	Scopes []string
+
+	BearerMethod string // header | body | query
+	DPoPRequired bool
 
 	// RegistrationAccessToken / RegistrationClientURI are set only for a DCR'd
 	// client, to delete it best-effort on exit (RFC 7591 §4).
@@ -151,8 +154,10 @@ type Discovered struct {
 	CodeChallengeMethodsSupported []string
 	DPoPSigningAlgValuesSupported []string
 	// PRM is the RFC 9728 Protected Resource Metadata (only set in --target mode).
-	PRMAuthorizationServers []string
-	PRMScopesSupported      []string
+	PRMAuthorizationServers          []string
+	PRMScopesSupported               []string
+	PRMBearerMethodsSupported        []string
+	PRMDPoPBoundAccessTokensRequired bool
 	// raw metadata documents, kept for evidence.
 	RawASMetadata []byte
 	RawPRM        []byte

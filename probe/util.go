@@ -2,6 +2,7 @@ package probe
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"time"
@@ -16,3 +17,10 @@ func randHex(n int) string {
 }
 
 func b64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+
+// S256 returns the base64url-encoded SHA-256 of s (used for PKCE-style hashes
+// and the DPoP ath claim).
+func S256(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return b64url(sum[:])
+}

@@ -33,8 +33,18 @@ type ProviderConfig struct {
 	TokenEndpoint  string         `yaml:"token_endpoint"` // optional; else discovered
 	Audience       []string       `yaml:"audience"`
 	RequiredScopes []string       `yaml:"required_scopes"`
-	DPoP           string         `yaml:"dpop"` // off | optional | required
+	BearerMethods  []string       `yaml:"bearer_methods"` // advertised in PRM; empty defaults to [header]
+	DPoP           string         `yaml:"dpop"`           // off | optional | required
 	Exchange       ExchangeConfig `yaml:"exchange"`
+}
+
+// BearerMethodsOrDefault returns the advertised bearer methods, defaulting to
+// header (RFC 6750 §2.1) when the provider config leaves them unset.
+func (p ProviderConfig) BearerMethodsOrDefault() []string {
+	if len(p.BearerMethods) > 0 {
+		return p.BearerMethods
+	}
+	return []string{"header"}
 }
 
 type ExchangeConfig struct {

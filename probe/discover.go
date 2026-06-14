@@ -17,18 +17,20 @@ type DiscoverInput struct {
 
 // Discovered is the resolved endpoint/capability set (mirrors conformance.Discovered).
 type Discovered struct {
-	Issuer                        string
-	TokenEndpoint                 string
-	AuthorizationEndpoint         string
-	JWKSURI                       string
-	GrantTypesSupported           []string
-	CodeChallengeMethodsSupported []string
-	DPoPSigningAlgValuesSupported []string
-	PRMAuthorizationServers       []string
-	PRMScopesSupported            []string
-	WWWAuthenticate               string
-	RawASMetadata                 []byte
-	RawPRM                        []byte
+	Issuer                           string
+	TokenEndpoint                    string
+	AuthorizationEndpoint            string
+	JWKSURI                          string
+	GrantTypesSupported              []string
+	CodeChallengeMethodsSupported    []string
+	DPoPSigningAlgValuesSupported    []string
+	PRMAuthorizationServers          []string
+	PRMScopesSupported               []string
+	PRMBearerMethodsSupported        []string
+	PRMDPoPBoundAccessTokensRequired bool
+	WWWAuthenticate                  string
+	RawASMetadata                    []byte
+	RawPRM                           []byte
 
 	RegistrationEndpoint               string
 	TokenEndpointAuthMethodsSupported  []string
@@ -63,12 +65,16 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 		}
 		d.RawPRM = prm.Body
 		var prmDoc struct {
-			AuthorizationServers []string `json:"authorization_servers"`
-			ScopesSupported      []string `json:"scopes_supported"`
+			AuthorizationServers          []string `json:"authorization_servers"`
+			ScopesSupported               []string `json:"scopes_supported"`
+			BearerMethodsSupported        []string `json:"bearer_methods_supported"`
+			DPoPBoundAccessTokensRequired bool     `json:"dpop_bound_access_tokens_required"`
 		}
 		_ = json.Unmarshal(prm.Body, &prmDoc)
 		d.PRMAuthorizationServers = prmDoc.AuthorizationServers
 		d.PRMScopesSupported = prmDoc.ScopesSupported
+		d.PRMBearerMethodsSupported = prmDoc.BearerMethodsSupported
+		d.PRMDPoPBoundAccessTokensRequired = prmDoc.DPoPBoundAccessTokensRequired
 		if len(prmDoc.AuthorizationServers) == 0 {
 			return d, errors.New("PRM has no authorization_servers")
 		}

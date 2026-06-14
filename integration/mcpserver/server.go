@@ -42,9 +42,11 @@ func buildMux(cfg *Config, deps buildDeps) (*http.ServeMux, error) {
 		return nil, fmt.Errorf("metadata path: %w", err)
 	}
 	prm, err := aoa.NewMetadataHandler(aoa.ProtectedResourceMetadata{
-		Resource:             resource,
-		AuthorizationServers: []string{p.Issuer},
-		ScopesSupported:      p.RequiredScopes,
+		Resource:                      resource,
+		AuthorizationServers:          []string{p.Issuer},
+		ScopesSupported:               p.RequiredScopes,
+		BearerMethodsSupported:        p.BearerMethodsOrDefault(),
+		DPoPBoundAccessTokensRequired: p.DPoPMode() == aoa.DPoPRequired,
 	}, aoa.HandlerOptions{AllowInsecureLocalhost: true})
 	if err != nil {
 		return nil, fmt.Errorf("metadata handler: %w", err)

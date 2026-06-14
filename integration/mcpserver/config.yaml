@@ -12,7 +12,19 @@ providers:
     issuer: https://localhost:8443/realms/mcp
     audience: [mcp-api]
     required_scopes: [mcp:read]
+    bearer_methods: [header]
     dpop: optional
+    exchange:
+      client_id: mcp-gateway
+      client_secret: ${KC_GATEWAY_SECRET}
+  # same realm as keycloak, but requires DPoP-bound presentation so you can test
+  # presenting a sender-constrained token to the resource.
+  keycloak-dpop:
+    issuer: https://localhost:8443/realms/mcp
+    audience: [mcp-api]
+    required_scopes: [mcp:read]
+    bearer_methods: [header]
+    dpop: required
     exchange:
       client_id: mcp-gateway
       client_secret: ${KC_GATEWAY_SECRET}

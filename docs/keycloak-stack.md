@@ -207,11 +207,30 @@ go run ../../cmd/aoa-conform --issuer https://localhost:8443/realms/mcp $TLS \
   --token-auth-method client_secret_basic
 ```
 
+### 3g. Exercise DPoP-bound presentation
+
+The `keycloak-dpop` provider profile is identical to `keycloak` but sets
+`dpop: required`, so the MCP server advertises `dpop_bound_access_tokens_required`
+in its PRM and rejects a plain Bearer token. Start the server with that profile,
+then run `--present`: the tool reads the PRM, mints a DPoP proof bound to the
+resource URL, and presents the token under the `DPoP` scheme.
+
+```sh
+# in the server terminal
+cd integration/mcpserver
+export KC_GATEWAY_SECRET=gateway-secret
+MCP_PROVIDER=keycloak-dpop go run .
+
+# in the aoa-conform terminal
+go run ../../cmd/aoa-conform --target https://localhost:8444/mcp $TLS \
+  --client-id mcp-conform --client-secret conform-secret --present
+```
+
 ### Useful flags
 
 - `--profile core|extended`: limit to one profile (default: both)
 - `--format md|json`: scorecard (default) or machine-readable JSON for CI
-- `--present`: complete the loop by presenting the obtained token to the resource server
+- `--present`: complete the loop by presenting the obtained token to the resource server. The tool presents by the method the PRM advertises in `bearer_methods_supported` (default `header`) and DPoP-binds the token when the PRM sets `dpop_bound_access_tokens_required`. A `403` (authenticated but missing scope) is a failure, not a pass.
 - `--scope "mcp:read"`: space-separated scopes to request when obtaining a token (override)
 - `--token-auth-method client_secret_post|client_secret_basic`: force the token-endpoint client auth method (default: read from metadata)
 - `--registration-token <token>`: initial access token for dynamic registration, if the realm requires one
@@ -303,7 +322,9 @@ exchange request actually narrow the result.
 
 ## Switching providers (Hydra / Okta)
 
-`config.yaml` ships `keycloak` (active), `hydra`, and `okta` profiles. Set
+`config.yaml` ships `keycloak` (active), `keycloak-dpop`, `hydra`, and `okta`
+profiles. `keycloak-dpop` reuses the Keycloak realm but requires DPoP-bound
+presentation (see [3g](#3g-exercise-dpop-bound-presentation)). Set
 `active_provider:` in the file, or pass `--provider` / `$MCP_PROVIDER`, and point
 that profile's `issuer` at your own instance. Only Keycloak is in docker-compose;
 you supply Hydra/Okta. One active provider per run: `aoa` binds one issuer per guard.
