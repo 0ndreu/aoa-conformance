@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -23,7 +24,7 @@ type options struct {
 	ClientSecret string
 	SubjectToken string
 	Scope        string // space-separated scopes to request (--scope)
-	Profile      string // "", "core", "extended"
+	Profile      string // comma-separated: "", "core", "extended", "rc"
 	Format       string // "md" | "json"
 	Present      bool
 	Strict       bool
@@ -43,7 +44,7 @@ func main() {
 	flag.StringVar(&o.ClientSecret, "client-secret", "", "client secret (Tier 1)")
 	flag.StringVar(&o.SubjectToken, "subject-token", "", "user token to exchange (Tier 2)")
 	flag.StringVar(&o.Scope, "scope", "", "space-separated scopes to request when obtaining a token")
-	flag.StringVar(&o.Profile, "profile", "", "limit to: core | extended (default: all)")
+	flag.StringVar(&o.Profile, "profile", "", "limit to a comma-separated list: core, extended, rc (default: core,extended)")
 	flag.StringVar(&o.Format, "format", "md", "report format: md | json")
 	flag.BoolVar(&o.Present, "present", false, "complete the agent loop: present a token to the resource server")
 	flag.BoolVar(&o.Strict, "strict", false, "treat SHOULD violations as failures")
@@ -62,13 +63,12 @@ func main() {
 }
 
 func run(o options, w io.Writer) int {
-	reg := conformance.DefaultRegistry()
-	switch o.Profile {
-	case "core":
-		reg = reg.FilterProfiles(conformance.ProfileCore)
-	case "extended":
-		reg = reg.FilterProfiles(conformance.ProfileExtended)
+	profiles, err := parseProfiles(o.Profile)
+	if err != nil {
+		fmt.Fprintln(w, "error:", err)
+		return 2
 	}
+	reg := conformance.DefaultRegistry().FilterProfiles(profiles...)
 
 	client, err := buildHTTPClient(o)
 	if err != nil {
@@ -90,10 +90,21 @@ func run(o options, w io.Writer) int {
 
 	if o.AuthCode {
 		ctx := context.Background()
-		if err := discoverInto(ctx, tgt); err != nil {
+		if err := discoverForAuthCode(tgt); err != nil {
 			fmt.Fprintln(os.Stderr, "auth-code: discovery failed:", err)
 			return 1
 		}
+		// bind the callback listener before resolution so DCR can register the
+		// exact loopback redirect_uri the flow will redirect back to, and so
+		// RunAuthCode reuses the same port.
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "auth-code: could not open callback listener:", err)
+			return 1
+		}
+		defer ln.Close()
+		ro.RedirectURIs = []string{fmt.Sprintf("http://%s/callback", ln.Addr().String())}
+
 		plan, _ := conformance.Resolve(ctx, tgt.Client, tgt.Discovered, ro)
 		tgt.Plan = plan
 		defer cleanupRegistration(ctx, tgt)
@@ -106,6 +117,7 @@ func run(o options, w io.Writer) int {
 			UsePAR:                plan.UsePAR,
 			PAREndpoint:           plan.PAREndpoint,
 			HTTPClient:            tgt.Client,
+			Listener:              ln,
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "auth-code: interactive flow failed:", err)
@@ -148,6 +160,34 @@ func finish(o options, w io.Writer, rep conformance.Report) int {
 	return 0
 }
 
+// parseProfiles maps a comma-separated --profile value into profile constants.
+// an empty value selects the stable profiles (core + extended); the RC profile
+// is opt-in via "rc". unknown tokens return an error.
+func parseProfiles(s string) ([]conformance.Profile, error) {
+	if strings.TrimSpace(s) == "" {
+		return []conformance.Profile{conformance.ProfileCore, conformance.ProfileExtended}, nil
+	}
+	var out []conformance.Profile
+	for _, tok := range strings.Split(s, ",") {
+		switch strings.TrimSpace(tok) {
+		case "core":
+			out = append(out, conformance.ProfileCore)
+		case "extended":
+			out = append(out, conformance.ProfileExtended)
+		case "rc":
+			out = append(out, conformance.ProfileJuly28RC)
+		case "":
+			continue
+		default:
+			return nil, fmt.Errorf("unknown profile %q (want core, extended, or rc)", tok)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no valid profiles in %q", s)
+	}
+	return out, nil
+}
+
 // resolveOptionsFrom maps the CLI options into resolver inputs.
 func resolveOptionsFrom(o options) conformance.ResolveOptions {
 	return conformance.ResolveOptions{
@@ -169,20 +209,12 @@ func cleanupRegistration(ctx context.Context, tgt *conformance.Target) {
 	}
 }
 
-// discoverInto runs a discovery-only pass so the interactive auth-code flow can
-// read the resolved authorization/token endpoints. The full run re-discovers,
-// but that is cheap and keeps the two phases independent.
-func discoverInto(ctx context.Context, tgt *conformance.Target) error {
-	d, err := probe.Discover(ctx, tgt.Client, probe.DiscoverInput{
-		MCPURL: tgt.MCPURL,
-		Issuer: tgt.Issuer,
-	})
-	if d != nil {
-		tgt.Discovered.AuthorizationEndpoint = d.AuthorizationEndpoint
-		tgt.Discovered.TokenEndpoint = d.TokenEndpoint
-		tgt.Discovered.PRMScopesSupported = d.PRMScopesSupported
-	}
-	if err != nil {
+// discoverForAuthCode runs the shared discovery pass so the interactive
+// auth-code flow sees the full Discovered document (including the
+// registration_endpoint that Resolve needs to run DCR). The final run
+// re-discovers, but that is cheap and keeps the two phases independent.
+func discoverForAuthCode(tgt *conformance.Target) error {
+	if err := conformance.Discover(tgt); err != nil {
 		return err
 	}
 	if tgt.Discovered.AuthorizationEndpoint == "" || tgt.Discovered.TokenEndpoint == "" {

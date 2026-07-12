@@ -3,6 +3,7 @@ package conformance
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +40,30 @@ func TestJSONReporterRoundTrips(t *testing.T) {
 	}
 	if got["schema_version"] != ReportSchemaVersion {
 		t.Fatalf("schema_version missing/wrong: %v", got["schema_version"])
+	}
+}
+
+func TestJSONReporter_ModelCompat(t *testing.T) {
+	rep := Report{
+		Target: "https://mcp.example",
+		ModelVerdicts: []ModelVerdict{{
+			Surface: ModelSurface{Name: "claude-web"}, Verdict: "not-aligned", DataDate: "2026-07-06",
+			Reasons: []RequirementOutcome{{Requirement: ModelRequirement{ID: "rfc-9728"}, Status: "unmet"}},
+		}},
+	}
+	var b strings.Builder
+	if err := (JSONReporter{}).Write(&b, rep); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, `"model_compatibility"`) || !strings.Contains(out, `"verdict": "not-aligned"`) {
+		t.Fatalf("model_compatibility not emitted:\n%s", out)
+	}
+
+	// omitempty: absent when no verdicts
+	var b2 strings.Builder
+	_ = (JSONReporter{}).Write(&b2, Report{Target: "x"})
+	if strings.Contains(b2.String(), "model_compatibility") {
+		t.Fatalf("model_compatibility should be omitted when empty:\n%s", b2.String())
 	}
 }

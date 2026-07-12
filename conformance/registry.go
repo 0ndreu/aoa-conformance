@@ -28,7 +28,6 @@ func (r *Registry) FilterProfiles(profiles ...Profile) *Registry {
 }
 
 // DefaultRegistry is assembled from each checks_*.go file's register func.
-// Each Task 14-21 appends its register call here.
 func DefaultRegistry() *Registry {
 	r := &Registry{}
 	registerRFC9728(r)
@@ -42,6 +41,12 @@ func DefaultRegistry() *Registry {
 	registerRFC7662(r)
 	registerRFC7009(r)
 	registerRFC9207(r)
+	registerSEP2351(r)
+	registerSEP2468(r)
+	registerSEP837(r)
+	registerSEP2352(r)
+	registerSEP2207(r)
+	registerSEP2350(r)
 	registerSmoke(r)
 	return r
 }

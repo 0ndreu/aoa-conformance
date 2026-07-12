@@ -18,6 +18,9 @@ type Profile string
 const (
 	ProfileCore     Profile = "mcp-core"
 	ProfileExtended Profile = "mcp-agent-auth-extended"
+	// ProfileJuly28RC is the opt-in MCP 2026-07-28 Release Candidate profile.
+	// It is excluded from the default run and selected via --profile rc.
+	ProfileJuly28RC Profile = "mcp-2026-07-rc"
 )
 
 type Severity string
@@ -130,6 +133,11 @@ type AuthPlan struct {
 	// client, to delete it best-effort on exit (RFC 7591 §4).
 	RegistrationAccessToken string
 	RegistrationClientURI   string
+
+	// RegisteredApplicationType is the application_type the AS echoed on DCR,
+	// and RegistrationEvidence is the raw DCR exchange (SEP-837 / SEP-2352).
+	RegisteredApplicationType string
+	RegistrationEvidence      []byte
 }
 
 func (p AuthPlan) hasClient() bool { return p.ClientID != "" && p.ClientSecret != "" }

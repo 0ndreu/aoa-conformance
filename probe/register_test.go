@@ -2,6 +2,8 @@ package probe
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -29,6 +31,32 @@ func TestRegister_Success(t *testing.T) {
 	}
 	if got.ClientID != "cid" || got.ClientSecret != "sec" || got.RegistrationAccessToken != "rat" {
 		t.Fatalf("unexpected result %+v", got)
+	}
+}
+
+func TestRegisterSendsAndCapturesApplicationType(t *testing.T) {
+	var seen map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &seen)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		_, _ = w.Write([]byte(`{"client_id":"c","application_type":"native"}`))
+	}))
+	defer srv.Close()
+
+	res, err := Register(context.Background(), srv.Client(), RegisterInput{
+		RegistrationEndpoint: srv.URL,
+		ApplicationType:      "native",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen["application_type"] != "native" {
+		t.Fatalf("request application_type = %v, want native", seen["application_type"])
+	}
+	if res.ApplicationType != "native" {
+		t.Fatalf("response application_type = %q, want native", res.ApplicationType)
 	}
 }
 

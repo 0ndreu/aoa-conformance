@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 )
 
 // MarkdownReporter writes the human-readable scorecard (suitable for a README
@@ -50,6 +51,9 @@ func (MarkdownReporter) Write(w io.Writer, r Report) error {
 			fmt.Fprintln(w)
 		}
 	}
+	if len(r.ModelVerdicts) > 0 {
+		writeModelCompat(w, r.ModelVerdicts)
+	}
 	return nil
 }
 
@@ -74,4 +78,40 @@ func distinctRFCs(entries []Entry) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// writeModelCompat renders the terse agent-compatibility section, one line per
+// surface. The terminal output shows only the label and status; rationale and
+// source stay in the JSON and YAML corpus.
+func writeModelCompat(w io.Writer, verdicts []ModelVerdict) {
+	fmt.Fprintf(w, "## Agent compatibility (data as of %s)\n\n", verdicts[0].DataDate)
+	for _, v := range verdicts {
+		fmt.Fprintf(w, "  %-18s %-14s %s\n", v.Surface.Name, v.Verdict, verdictSummary(v))
+	}
+	fmt.Fprintln(w)
+}
+
+func verdictSummary(v ModelVerdict) string {
+	switch v.Verdict {
+	case "n/a":
+		return "out of OAuth scope"
+	case "aligned":
+		if len(v.Surface.Requires) == 0 {
+			return "bearer-only"
+		}
+		var cav []string
+		for _, c := range v.Caveats {
+			cav = append(cav, reqName(c.Requirement)+" unmet — optional")
+		}
+		if len(cav) > 0 {
+			return "(" + strings.Join(cav, "; ") + ")"
+		}
+		return ""
+	default: // not-aligned | inconclusive
+		var parts []string
+		for _, r := range v.Reasons {
+			parts = append(parts, reqName(r.Requirement)+" "+r.Status)
+		}
+		return strings.Join(parts, "; ")
+	}
 }

@@ -32,7 +32,9 @@ providers:
     issuer: https://localhost:4444/
     audience: [mcp-api]
     required_scopes: [mcp:read]
-    dpop: optional
+    bearer_methods: [header]
+    dpop: off            # OSS Hydra cannot issue DPoP-bound tokens
+    # no exchange: block. Hydra does not support RFC 8693 token exchange
   okta:
     issuer: https://dev-xxxxx.okta.com/oauth2/ausXXXXXXXX
     audience: ["api://mcp"]

@@ -14,6 +14,7 @@ type RSViolations struct {
 	AcceptAnyToken           bool // /mcp returns 200 for the --present smoke test
 	MalformedPRM             bool // PRM document is invalid non-JSON
 	UnresolvableAuthServer   bool // PRM lists an authorization server that does not resolve
+	NoSuffixPRM              bool // do not serve the RFC 9728 suffix-inserted PRM path (SEP-2351)
 }
 
 // RS is a fake MCP resource server: it emits the 401 + RFC 9728 PRM pointing at
@@ -35,6 +36,10 @@ func NewRS(asURL string, v RSViolations) *RS {
 	rs := &RS{asURL: asURL, v: v}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/oauth-protected-resource", rs.handlePRM)
+	if !v.NoSuffixPRM {
+		// SEP-2351: PRM must also resolve at the suffix-inserted path for /mcp.
+		mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", rs.handlePRM)
+	}
 	mux.HandleFunc("/mcp", rs.handleMCP)
 	rs.Server = httptest.NewServer(mux)
 	return rs

@@ -1,0 +1,51 @@
+# Ory Hydra dev config for the aoa-conform integration stack.
+# Public API: HTTPS :4444 (shared dev cert). Admin API: HTTP :4445 (internal).
+dsn: memory
+
+log:
+  level: debug
+  format: text
+  leak_sensitive_values: true   # dev-only conformance target: log everything
+
+serve:
+  public:
+    tls:
+      enabled: true
+      cert:
+        path: /etc/hydra/tls/server.crt
+      key:
+        path: /etc/hydra/tls/server.key
+  admin:
+    tls:
+      enabled: false             # admin stays HTTP on the internal docker network
+  cookies:
+    same_site_mode: Lax
+
+strategies:
+  access_token: jwt              # REQUIRED: mcpserver validates JWTs via JWKS
+
+urls:
+  self:
+    issuer: https://localhost:4444/
+    public: https://localhost:4444/
+  # browser-facing redirect targets. localhost is intentional (the user's browser
+  # reaches the consent app on the host), not the internal docker hostname.
+  login: http://localhost:5555/login
+  consent: http://localhost:5555/consent
+
+oidc:
+  dynamic_client_registration:
+    enabled: true                # exposes registration_endpoint (RFC 7591/7592)
+
+webfinger:
+  oidc_discovery:
+    client_registration_url: https://localhost:4444/oauth2/register
+
+oauth2:
+  pkce:
+    enforced: true               # require PKCE on the authorization-code flow (OAuth 2.1)
+  expose_internal_errors: true   # dev-only: surface full error detail
+
+secrets:
+  system:
+    - youReallyNeedToChangeThis-dev-only

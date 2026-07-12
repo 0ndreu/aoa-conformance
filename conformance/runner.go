@@ -26,7 +26,7 @@ func (r *Runner) Run(t *Target) Report {
 	rep := Report{SchemaVersion: ReportSchemaVersion, Target: target}
 
 	if !r.SkipDiscovery {
-		if err := r.discover(t); err != nil {
+		if err := Discover(t); err != nil {
 			// discovery failure is not fatal: checks that need it will skip or
 			// fail on their own. Record it as a synthetic error entry.
 			rep.Entries = append(rep.Entries, Entry{
@@ -58,9 +58,11 @@ func evaluateSafely(c Check, t *Target) (res Result) {
 	return c.Evaluate(t)
 }
 
-// discover resolves PRM (in --target mode) and AS metadata into t.Discovered.
+// Discover resolves PRM (in --target mode) and AS metadata into t.Discovered.
 // It also stashes the raw WWW-Authenticate challenge into t.Hints["www_authenticate"].
-func (r *Runner) discover(t *Target) error {
+// It is the single discovery mapping shared by the Runner and by CLI callers
+// (the --auth-code pre-step) so no path sees a partial Discovered.
+func Discover(t *Target) error {
 	d, err := probe.Discover(t.Context(), t.httpClient(), probe.DiscoverInput{
 		MCPURL: t.MCPURL,
 		Issuer: t.Issuer,

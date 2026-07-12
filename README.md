@@ -36,7 +36,7 @@ Checks are grouped into two profiles. By default a run includes both.
 - Token introspection, RFC 7662 (an issued token introspects as `active`)
 - Token revocation, RFC 7009 (a revoked token becomes inactive, confirmed via
   introspection)
-- mTLS-bound access tokens, RFC 8705 (the advertisement is coherent — the bound
+- mTLS-bound access tokens, RFC 8705 (the advertisement is coherent: the bound
   flag is accompanied by `mtls_endpoint_aliases`)
 
 ## Install
@@ -129,7 +129,7 @@ aoa-conform --issuer https://issuer.example.com \
 | `--scope "<scopes>"` | Space-separated scopes to request when obtaining a token. In `--target` mode the tool defaults to the scopes the resource advertises in its PRM. |
 | `--auth-code` | Obtain a user token interactively via `authorization_code` plus PKCE. Uses PAR when the server requires it. |
 | `--present` | Complete the loop: take a token from the AS and present it to the resource server, asserting it is accepted. The token is presented by the method the resource advertises in its PRM `bearer_methods_supported` (`header`, `body`, or `query`; default `header`), and is DPoP-bound when the PRM sets `dpop_bound_access_tokens_required`. A `403` (the token authenticates but lacks the required scope) counts as a failure. |
-| `--profile core\|extended` | Limit the run to one profile. Default is both. |
+| `--profile <list>` | Limit the run to a comma-separated list of profiles: `core`, `extended`, `rc`. Default is `core,extended`. The `rc` profile (`mcp-2026-07-rc`) probes the MCP 2026-07-28 Release Candidate authorization SEPs and is opt-in: use `--profile rc` for RC only, or `--profile rc,core,extended` for everything. |
 | `--format md\|json` | Report format. `md` is the human-readable scorecard (default), `json` is for CI and offline audit. |
 | `--strict` | Treat SHOULD-level violations as failures. Changes the exit code, not the report. |
 | `--cacert <file>` | PEM file of CA certificates to trust for TLS, for example a dev self-signed cert. |
@@ -160,3 +160,18 @@ legitimately don't offer.
 `aoa-conform` exits non-zero if any check fails or errors. With `--strict`, a
 SHOULD-severity failure also forces a non-zero exit. Skips never affect the exit
 code.
+
+## Provider stacks
+
+Two self-contained stacks are included in `integration/` for running the full
+end-to-end loop locally:
+
+- **Keycloak** (`docker compose up`): supports the full feature set including token
+  exchange (RFC 8693), DPoP (RFC 9449), PAR (RFC 9126), and mTLS advertisement
+  (RFC 8705). See `docs/keycloak-stack.md`.
+- **Ory Hydra** (`docker compose --profile hydra up`): a second self-contained
+  provider stack that exercises PKCE (S256), the `--target`/PRM loop, dynamic
+  client registration, and PKCE auth-code via the example consent app. Token
+  exchange, DPoP, PAR, mTLS, introspection, and revocation are not exercisable on
+  OSS Hydra and report skip; RFC 8707 audience reflection fails (so `--present`
+  does not complete). See `docs/hydra-stack.md`.

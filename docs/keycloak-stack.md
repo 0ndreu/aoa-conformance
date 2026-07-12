@@ -142,6 +142,10 @@ go run ../../cmd/aoa-conform --issuer https://localhost:8443/realms/mcp $TLS \
   --client-id mcp-conform --client-secret conform-secret
 ```
 
+Add `--profile rc,core,extended` to include the July-28 RC checks (Keycloak
+advertises the authorization-response `iss` parameter and supports the DCR
+fields these checks probe).
+
 ### 3b. Point at the MCP target (walks the full agent loop from the 401 challenge)
 
 ```sh
@@ -228,7 +232,7 @@ go run ../../cmd/aoa-conform --target https://localhost:8444/mcp $TLS \
 
 ### Useful flags
 
-- `--profile core|extended`: limit to one profile (default: both)
+- `--profile <list>`: comma-separated list of profiles to run — `core`, `extended`, `rc` (default: `core,extended`)
 - `--format md|json`: scorecard (default) or machine-readable JSON for CI
 - `--present`: complete the loop by presenting the obtained token to the resource server. The tool presents by the method the PRM advertises in `bearer_methods_supported` (default `header`) and DPoP-binds the token when the PRM sets `dpop_bound_access_tokens_required`. A `403` (authenticated but missing scope) is a failure, not a pass.
 - `--scope "mcp:read"`: space-separated scopes to request when obtaining a token (override)
@@ -267,10 +271,10 @@ read scopes from.
 
 #### Conformance checks
 
-The discovery-driven checks resolve cleanly here — each is pass or skip, never
+The discovery-driven checks resolve cleanly here. Each is pass or skip, never
 error:
 
-- `oauth21.authorize.response_type_code` (SHOULD): **pass** — Keycloak advertises
+- `oauth21.authorize.response_type_code` (SHOULD): **pass**. Keycloak advertises
   `code` in `response_types_supported`.
 - `rfc7662.introspect.active` (MAY) and `rfc7009.revoke.honored` (MAY): **pass**
   when you supply `CLIENT_ID`/`CLIENT_SECRET` (Keycloak serves both
@@ -278,7 +282,7 @@ error:
 - `rfc9207.authorize.iss_present` (SHOULD): **pass** under `--auth-code` (Keycloak
   sets `authorization_response_iss_parameter_supported` and returns `iss` on the
   callback); **skip** without `--auth-code`.
-- `rfc8414.metadata.signed_metadata_valid` (SHOULD): **skip** — Keycloak does not
+- `rfc8414.metadata.signed_metadata_valid` (SHOULD): **skip**. Keycloak does not
   emit `signed_metadata`. The fake AS covers the pass/fail behavior.
 - `rfc8705.advertise.mtls_bound` (MAY): **skip** unless the realm advertises
   `tls_client_certificate_bound_access_tokens`; **pass** when the advertisement is
@@ -349,9 +353,12 @@ exchange request actually narrow the result.
 `config.yaml` ships `keycloak` (active), `keycloak-dpop`, `hydra`, and `okta`
 profiles. `keycloak-dpop` reuses the Keycloak realm but requires DPoP-bound
 presentation (see [3g](#3g-exercise-dpop-bound-presentation)). Set
-`active_provider:` in the file, or pass `--provider` / `$MCP_PROVIDER`, and point
-that profile's `issuer` at your own instance. Only Keycloak is in docker-compose;
-you supply Hydra/Okta. One active provider per run: `aoa` binds one issuer per guard.
+`active_provider:` in the file, or pass `--provider` / `$MCP_PROVIDER`.
+
+`hydra` is now a runnable stack too: `docker compose --profile hydra up` brings
+up Ory Hydra, the example consent app, and auto-seeds its clients. See
+`docs/hydra-stack.md`. Okta remains a config-only profile you point at your own
+org. One active provider per run: `aoa` binds one issuer per guard.
 
 ---
 

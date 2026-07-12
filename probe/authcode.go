@@ -45,6 +45,11 @@ type AuthCodeConfig struct {
 	UsePAR      bool
 	PAREndpoint string
 
+	// Listener, when set, is the pre-bound loopback callback listener. Callers
+	// bind it before resolution so the redirect_uri can be registered via DCR
+	// and reused here verbatim. When nil, RunAuthCode binds one on 127.0.0.1:0.
+	Listener net.Listener
+
 	openBrowser func(string) error // injected in tests; defaults to the OS opener
 }
 
@@ -53,11 +58,15 @@ type AuthCodeConfig struct {
 // waits for the redirect, and exchanges the code for a token. Returns the
 // access token string.
 func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (AuthCodeResult, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return AuthCodeResult{}, err
+	ln := cfg.Listener
+	if ln == nil {
+		var err error
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return AuthCodeResult{}, err
+		}
+		defer ln.Close()
 	}
-	defer ln.Close()
 	redirectURI := fmt.Sprintf("http://%s/callback", ln.Addr().String())
 
 	oc := &oauth2.Config{

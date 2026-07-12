@@ -13,9 +13,10 @@ type Entry struct {
 
 // Report is the full output of a run.
 type Report struct {
-	SchemaVersion string  `json:"schema_version"`
-	Target        string  `json:"target"`
-	Entries       []Entry `json:"entries"`
+	SchemaVersion string         `json:"schema_version"`
+	Target        string         `json:"target"`
+	Entries       []Entry        `json:"entries"`
+	ModelVerdicts []ModelVerdict `json:"model_compatibility,omitempty"`
 }
 
 // Summary is a per-status count, used for the scorecard header and exit code.

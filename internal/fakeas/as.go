@@ -3,6 +3,7 @@ package fakeas
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -43,6 +44,8 @@ type Violations struct {
 
 	NoRegistration          bool // do not advertise/serve registration_endpoint
 	RegistrationRequiresIAT bool // 401 unless an initial access token is presented
+	MangleApplicationType   bool // echo a different application_type than requested (SEP-837)
+	ForeignRegistrationURI  bool // return a registration_client_uri on a different origin than the issuer (SEP-2352)
 
 	RequirePAR    bool // advertise require_pushed_authorization_requests
 	NoPAREndpoint bool // advertise require_pushed_authorization_requests but omit the endpoint
@@ -203,13 +206,28 @@ func (as *AS) handleRegister(w http.ResponseWriter, r *http.Request) {
 		as.tokenError(w, 401, "invalid_token", "initial access token required")
 		return
 	}
-	writeJSON(w, 201, map[string]any{
+	var req map[string]any
+	if body, _ := io.ReadAll(r.Body); len(body) > 0 {
+		_ = json.Unmarshal(body, &req)
+	}
+	resp := map[string]any{
 		"client_id":                  "dcr-client",
 		"client_secret":              "dcr-secret",
 		"registration_access_token":  "rat-123",
 		"registration_client_uri":    as.URL + "/register/dcr-client",
 		"token_endpoint_auth_method": "client_secret_post",
-	})
+	}
+	if at, ok := req["application_type"].(string); ok && at != "" {
+		if as.v.MangleApplicationType {
+			resp["application_type"] = "web" // buggy AS: rewrites the declared type
+		} else {
+			resp["application_type"] = at
+		}
+	}
+	if as.v.ForeignRegistrationURI {
+		resp["registration_client_uri"] = "https://evil.example/register/dcr-client"
+	}
+	writeJSON(w, 201, resp)
 }
 
 func (as *AS) handleJWKS(w http.ResponseWriter, _ *http.Request) {

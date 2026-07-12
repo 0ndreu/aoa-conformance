@@ -13,3 +13,37 @@ services:
     volumes:
       - ./keycloak/tls:/opt/keycloak/conf/tls:ro
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+
+  hydra:
+    image: oryd/hydra:v26.2.0
+    profiles: ["hydra"]
+    command: serve all -c /etc/hydra/hydra.yml
+    ports:
+      - "4444:4444"   # public  (HTTPS)
+      - "4445:4445"   # admin   (HTTP, dev)
+    volumes:
+      - ./hydra/hydra.yml:/etc/hydra/hydra.yml:ro
+      - ./keycloak/tls:/etc/hydra/tls:ro   # shared dev cert
+    depends_on:
+      - consent
+
+  consent:
+    image: oryd/hydra-login-consent-node:v26.2.0
+    profiles: ["hydra"]
+    environment:
+      HYDRA_ADMIN_URL: http://hydra:4445
+      PORT: "5555"
+    ports:
+      - "5555:5555"
+
+  hydra-init:
+    image: curlimages/curl:8.11.0
+    profiles: ["hydra"]
+    restart: "no"
+    depends_on:
+      - hydra
+    environment:
+      HYDRA_ADMIN_URL: http://hydra:4445
+    volumes:
+      - ./hydra/seed.sh:/seed.sh:ro
+    entrypoint: ["sh", "/seed.sh"]

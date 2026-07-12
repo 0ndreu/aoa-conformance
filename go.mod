@@ -6,6 +6,7 @@ require (
 	github.com/0ndreu/aoa v0.0.1
 	github.com/lestrrat-go/jwx/v3 v3.1.1
 	golang.org/x/oauth2 v0.36.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

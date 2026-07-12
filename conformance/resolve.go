@@ -76,6 +76,7 @@ func Resolve(ctx context.Context, client *http.Client, d Discovered, opts Resolv
 			GrantTypes:              []string{"client_credentials", "authorization_code"},
 			TokenEndpointAuthMethod: plan.TokenAuthMethod,
 			Scope:                   strings.Join(plan.Scopes, " "),
+			ApplicationType:         "native",
 			InitialAccessToken:      opts.RegistrationToken,
 		})
 		if err != nil {
@@ -86,6 +87,8 @@ func Resolve(ctx context.Context, client *http.Client, d Discovered, opts Resolv
 		plan.Registered = true
 		plan.RegistrationAccessToken = res.RegistrationAccessToken
 		plan.RegistrationClientURI = res.RegistrationClientURI
+		plan.RegisteredApplicationType = res.ApplicationType
+		plan.RegistrationEvidence = res.Evidence
 	}
 	return plan, nil
 }
