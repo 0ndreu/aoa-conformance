@@ -40,14 +40,16 @@ type Violations struct {
 	NoIntrospection    bool // do not advertise/serve introspection_endpoint
 	IntrospectInactive bool // always report active:false (buggy AS)
 
-	NoRevocation bool // do not advertise/serve revocation_endpoint
-	IgnoreRevoke bool // accept the revoke request but keep the token active
+	NoRevocation   bool // do not advertise/serve revocation_endpoint
+	DeadRevocation bool // advertise a revocation_endpoint whose path 404s
+	IgnoreRevoke   bool // accept the revoke request but keep the token active
 
 	NoRegistration          bool // do not advertise/serve registration_endpoint
 	RejectRegistration      bool // advertise registration_endpoint but reject every request
 	RegistrationRequiresIAT bool // 401 unless an initial access token is presented
 	MangleApplicationType   bool // echo a different application_type than requested (SEP-837)
 	ForeignRegistrationURI  bool // return a registration_client_uri on a different origin than the issuer (SEP-2352)
+	NoClientConfigEndpoint  bool // return neither registration_client_uri nor registration_access_token (both optional in RFC 7591)
 
 	RequirePAR    bool // advertise require_pushed_authorization_requests
 	NoPAREndpoint bool // advertise require_pushed_authorization_requests but omit the endpoint
@@ -279,6 +281,10 @@ func (as *AS) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if as.v.ForeignRegistrationURI {
 		resp["registration_client_uri"] = "https://evil.example/register/dcr-client"
+	}
+	if as.v.NoClientConfigEndpoint {
+		delete(resp, "registration_client_uri")
+		delete(resp, "registration_access_token")
 	}
 	writeJSON(w, 201, resp)
 }
@@ -579,6 +585,10 @@ func (as *AS) handleIntrospect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (as *AS) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	if as.v.DeadRevocation {
+		w.WriteHeader(404) // advertised in metadata, never deployed
+		return
+	}
 	_ = r.ParseForm()
 	if !as.v.IgnoreRevoke {
 		as.revoke(r.Form.Get("token"))

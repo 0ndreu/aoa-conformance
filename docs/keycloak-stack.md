@@ -246,7 +246,7 @@ go run ../../cmd/aoa-conform --target https://localhost:8444/mcp $TLS \
 
 - `--profile <list>`: comma-separated list of profiles to run — `core`, `extended`, `2026-07` (default: all three)
 - `--format md|json`: scorecard (default) or machine-readable JSON for CI
-- `--present`: complete the loop by presenting the obtained token to the resource server. The tool presents by the method the PRM advertises in `bearer_methods_supported` (default `header`) and DPoP-binds the token when the PRM sets `dpop_bound_access_tokens_required`. A `403` (authenticated but missing scope) is a failure, not a pass.
+- `--present`: complete the loop by presenting the obtained token to the resource server, on the `Authorization` header, DPoP-bound when the PRM sets `dpop_bound_access_tokens_required`. A `403` (authenticated but missing scope) is a failure, not a pass.
 - `--scope "mcp:read"`: space-separated scopes to request when obtaining a token (override)
 - `--token-auth-method client_secret_post|client_secret_basic`: force the token-endpoint client auth method (default: read from metadata)
 - `--registration-token <token>`: initial access token for dynamic registration, if the realm requires one

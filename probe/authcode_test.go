@@ -94,6 +94,45 @@ func TestAuthCodeCapturesRefreshTokenAndScope(t *testing.T) {
 	}
 }
 
+// MCP requires the client to name the resource it wants the token for on every
+// authorization and token request. Without it the AS has nothing to bind the
+// audience to, and the run cannot tell whether the server would have honoured it.
+func TestRunAuthCode_SendsResourceIndicator(t *testing.T) {
+	const resource = "https://mcp.example.com/mcp"
+	var authResource, tokenResource string
+
+	as := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/authorize":
+			authResource = r.URL.Query().Get("resource")
+			redir := r.URL.Query().Get("redirect_uri")
+			state := r.URL.Query().Get("state")
+			http.Redirect(w, r, fmt.Sprintf("%s?code=C&state=%s", redir, state), http.StatusFound)
+		case "/token":
+			_ = r.ParseForm()
+			tokenResource = r.Form.Get("resource")
+			fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer"}`, "AT")
+		}
+	}))
+	defer as.Close()
+
+	if _, err := RunAuthCode(context.Background(), AuthCodeConfig{
+		AuthorizationEndpoint: as.URL + "/authorize",
+		TokenEndpoint:         as.URL + "/token",
+		ClientID:              "c",
+		Resource:              resource,
+		openBrowser:           func(u string) error { go http.Get(u); return nil },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if authResource != resource {
+		t.Errorf("authorize request resource = %q, want %q", authResource, resource)
+	}
+	if tokenResource != resource {
+		t.Errorf("token request resource = %q, want %q", tokenResource, resource)
+	}
+}
+
 func TestRunAuthCode_PushesPARFirst(t *testing.T) {
 	var parHit bool
 	var authQuery url.Values

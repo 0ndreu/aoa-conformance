@@ -27,6 +27,10 @@ checks need no credential from you at all, so they run on a stranger's server:
     canonical URI — no fragment, lowercase scheme and host
   - `mcp.token.query_not_advertised` (MUST): `bearer_methods_supported` does not
     offer `query`; an access token must never travel in a URI
+  - `mcp.token.header_method_advertised` (MUST): when the PRM lists
+    `bearer_methods_supported` at all, `header` is among them. MCP clients send
+    the token in the `Authorization` header, so a list that omits it rejects any
+    client that honors the advertisement
   - `mcp.token.invalid_rejected` (MUST): a well-formed but unissued bearer token
     gets a `401`, not a `200`, `403` or `500`
   - `mcp.token.foreign_audience_rejected` (MUST): a token signed by a different
@@ -37,7 +41,11 @@ checks need no credential from you at all, so they run on a stranger's server:
 - RFC 8414 authorization server metadata, including `signed_metadata` signature
   verification against the issuer JWKS when advertised
 - PKCE, RFC 7636 (S256 advertised, `plain` rejected)
-- Resource indicators, RFC 8707 (audience reflected, multiple resources)
+- Resource indicators, RFC 8707 (audience reflected, multiple resources). The
+  token-endpoint checks here mint their own `client_credentials` token, which
+  most public MCP authorization servers do not offer;
+  `rfc8707.authcode.aud_reflects_resource` covers the same question on those
+  servers by reading the `aud` of the token an `--auth-code` round captured
 - OAuth 2.1 baseline behavior (token endpoint reachable, correct error shapes,
   unknown grants rejected, `code` response type advertised)
 - Authorization server issuer identification, RFC 9207 (the callback carries an
@@ -50,9 +58,12 @@ checks need no credential from you at all, so they run on a stranger's server:
 - DPoP sender-constrained tokens, RFC 9449 (proof accepted, `cnf.jkt` bound,
   nonce challenge, wrong `htu` rejected)
 - Token introspection, RFC 7662 (an issued token introspects as `active`)
-- Token revocation, RFC 7009 (the endpoint is advertised, and a revoked token
-  becomes inactive — confirmed via introspection, so the second check needs an
-  introspection endpoint the first one does not)
+- Token revocation, RFC 7009 (the advertised endpoint is actually deployed —
+  the check posts a junk token to it, and an endpoint that answers `404`, `405`
+  or `501` reports ➖ rather than being taken on trust — and a revoked token
+  becomes inactive, which is confirmed via introspection, so the second check
+  reports ⚪ where no `introspection_endpoint` is advertised to read the answer
+  from)
 - mTLS-bound access tokens, RFC 8705 (the advertisement is coherent: the bound
   flag is accompanied by `mtls_endpoint_aliases`)
 
@@ -64,7 +75,11 @@ specification made final:
 - Well-known suffix paths, SEP-2351: the PRM is served at
   `/.well-known/oauth-protected-resource/<path>` for a server on a sub-path
 - Issuer-bound registration credentials, SEP-2352 (MUST): what registration hands
-  back stays on the issuer that handed it back
+  back stays on the issuer that handed it back. RFC 7591 makes
+  `registration_client_uri` optional — it comes only with a client-configuration
+  endpoint — so a registration that hands back no credential at all passes: there
+  is nothing that could be replayed elsewhere. A registration access token with
+  no URI to bind it to still fails
 - Authorization-response `iss`, SEP-2468: the server advertises
   `authorization_response_iss_parameter_supported` (SHOULD — the spec notes a
   future revision raises this to MUST) and returns `iss` on the callback
@@ -204,9 +219,9 @@ aoa-conform --issuer https://issuer.example.com \
 | `--token-auth-method <method>` | Force the token-endpoint client auth method: `none`, `client_secret_post` or `client_secret_basic`. Default is read from server metadata. |
 | `--registration-token <token>` | Initial access token for dynamic client registration, for servers that require one. |
 | `--scope "<scopes>"` | Space-separated scopes to request when obtaining a token. In `--target` mode the tool defaults to the scopes the resource advertises in its PRM. |
-| `--auth-code` | Obtain a user token interactively via `authorization_code` plus PKCE. Uses PAR when the server requires it. |
+| `--auth-code` | Obtain a user token interactively via `authorization_code` plus PKCE. Uses PAR when the server requires it. In `--target` mode the round sends `resource=<target>` on both the authorization request and the token exchange, as MCP requires of every client; in `--issuer` mode there is no resource to name and nothing is sent. There is no retry without it — a server that rejects the parameter is a finding, not something to paper over. |
 | `--stepup` | With `--auth-code`, also run the SEP-2350 step-up probe: two extra interactive authorization rounds against the first two PRM-advertised scopes, checking that the second round's token accumulates the first round's scope rather than dropping it. |
-| `--present` | Complete the loop: take a token from the AS and present it to the resource server on a real MCP call, asserting it is accepted. The token is presented by the method the resource advertises in its PRM `bearer_methods_supported` (`header`, `body`, or `query`; default `header`), and is DPoP-bound when the PRM sets `dpop_bound_access_tokens_required`. A `403` (the token authenticates but lacks the required scope) counts as a failure. |
+| `--present` | Complete the loop: take a token from the AS and present it to the resource server on a real MCP call, asserting it is accepted. The token always rides the `Authorization` header, which is the presentation MCP §2.3 mandates and the only one a server has to accept — following the PRM's `bearer_methods_supported` instead would blame the token for an advertisement's mistake, and what the PRM advertises is judged separately by `mcp.token.header_method_advertised`. The presentation is DPoP-bound when the PRM sets `dpop_bound_access_tokens_required`. A `403` (the token authenticates but lacks the required scope) counts as a failure. |
 | `--profile <list>` | Limit the run to a comma-separated list of profiles: `core`, `extended`, `2026-07`. Default is all three. The `2026-07` profile (`mcp-2026-07-28`) covers the authorization SEPs the MCP 2026-07-28 specification made final. Two of its checks exercise deeper flows: SEP-2207 (refresh-scope narrowing) runs once `--auth-code` has captured a refresh token, and SEP-2350 (step-up scope accumulation) needs `--auth-code --stepup` plus at least two PRM-advertised scopes, skipping otherwise. |
 | `--format md\|json` | Report format. `md` is the human-readable scorecard (default), `json` is for CI and offline audit. |
 | `--strict` | Treat SHOULD-level violations as fatal. Changes the exit code, not the report: without it only a MUST-level fail or error exits non-zero. |

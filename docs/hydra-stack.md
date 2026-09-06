@@ -196,7 +196,10 @@ runs the client-dependent checks with it, and deletes it when the run ends
 `application_type: native` for the loopback redirect (SEP-837). Hydra answers with
 a relative `registration_client_uri` (`/register/<id>`), which the tool resolves
 against the registration endpoint so cleanup and the SEP-2352 issuer-binding check
-both see the real URL. If registration is refused, that shows up as a named
+both see the real URL — the check confirms that URL sits on the issuer's origin.
+An AS that returns no `registration_client_uri` at all passes it instead: RFC 7591
+makes the field optional, and a credential that was never handed back cannot be
+replayed at another issuer. If registration is refused, that shows up as a named
 `error` entry quoting Hydra's response rather than as a wall of skips:
 
 ```sh
@@ -231,7 +234,7 @@ point `--client-id` at it.
 
 - `--profile <list>`: comma-separated list of profiles to run — `core`, `extended`, `2026-07` (default: all three)
 - `--format md|json`: scorecard (default) or machine-readable JSON for CI
-- `--present`: complete the loop by presenting the obtained token to the resource server. The tool presents by the method the PRM advertises in `bearer_methods_supported` (default `header`). Against Hydra this does not complete; see [What a healthy run looks like](#what-a-healthy-run-looks-like).
+- `--present`: complete the loop by presenting the obtained token to the resource server, on the `Authorization` header. Against Hydra this does not complete; see [What a healthy run looks like](#what-a-healthy-run-looks-like).
 - `--scope "mcp:read"`: space-separated scopes to request when obtaining a token (override)
 - `--token-auth-method client_secret_post|client_secret_basic`: force the token-endpoint client auth method (default: read from metadata)
 - `--strict`: treat SHOULD-level violations as fatal (changes the exit code; without it only a MUST-level fail or error exits non-zero)
@@ -282,10 +285,11 @@ than a missing credential:
   endpoint is on the admin API, which the public discovery document does not
   advertise.
 - `rfc7009.advertise.revocation_endpoint`: **pass**. Hydra advertises a
-  `revocation_endpoint`, so revocation reports as supported.
-- `rfc7009.revoke.honored` (MAY): ➖ **not supported**. The check verifies revocation
+  `revocation_endpoint` and the URL answers, so revocation reports as supported.
+- `rfc7009.revoke.honored` (MAY): ⚪ **not tested**. The check verifies revocation
   by introspecting the revoked token, and there is no advertised
-  `introspection_endpoint` for it to use.
+  `introspection_endpoint` for it to read the answer from. That is a missing
+  verification path, not Hydra declining to revoke.
 - `pkce.enforce.reject_plain` (MUST): ⚪ **not tested**, with or without
   `--auth-code`. A genuine plain-downgrade probe needs a dedicated,
   never-redeemed authorization code that the shared `--auth-code` exchange

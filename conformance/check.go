@@ -177,7 +177,6 @@ type AuthPlan struct {
 
 	Scopes []string
 
-	BearerMethod string // header | body | query
 	DPoPRequired bool
 
 	// RegistrationAccessToken / RegistrationClientURI are set only for a DCR'd

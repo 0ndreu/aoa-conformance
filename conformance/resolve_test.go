@@ -113,27 +113,14 @@ func TestResolve_PresentationFields(t *testing.T) {
 	d := Discovered{
 		Issuer:                           "https://as.example",
 		TokenEndpoint:                    "https://as.example/token",
-		PRMBearerMethodsSupported:        []string{"body", "header"},
 		PRMDPoPBoundAccessTokensRequired: true,
 	}
 	plan, err := Resolve(context.Background(), http.DefaultClient, d, ResolveOptions{ClientID: "c", ClientSecret: "s"})
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if plan.BearerMethod != "body" {
-		t.Errorf("BearerMethod = %q, want first advertised (body)", plan.BearerMethod)
-	}
 	if !plan.DPoPRequired {
 		t.Errorf("DPoPRequired = false")
-	}
-}
-
-func TestResolve_BearerMethodDefaultsToHeader(t *testing.T) {
-	plan, _ := Resolve(context.Background(), http.DefaultClient,
-		Discovered{Issuer: "https://x", TokenEndpoint: "https://x/token"},
-		ResolveOptions{ClientID: "c", ClientSecret: "s"})
-	if plan.BearerMethod != "header" {
-		t.Errorf("default BearerMethod = %q, want header", plan.BearerMethod)
 	}
 }
 

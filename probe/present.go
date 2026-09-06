@@ -27,9 +27,10 @@ type PresentInput struct {
 //
 // The default header method speaks MCP: the token rides an Authorization
 // header on a real JSON-RPC POST, so the status reflects whether the resource
-// server accepted the token rather than whether it tolerates a bare GET. The
-// body and query methods stay as plain RFC 6750 presentations — their only
-// purpose is the advisory check that a server must not accept them.
+// server accepted the token rather than whether it tolerates a bare GET. It is
+// the only method the checks use — MCP §2.3 mandates it of clients. The body
+// and query methods remain as plain RFC 6750 presentations for a caller that
+// wants to ask what a server does with a token sent the wrong way.
 func PresentToken(ctx context.Context, c *http.Client, in PresentInput) (*Response, error) {
 	method := in.Method
 	if method == "" {

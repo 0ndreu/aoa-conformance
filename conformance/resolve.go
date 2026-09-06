@@ -42,15 +42,6 @@ func resolveTokenAuthMethod(explicit string, advertised []string, hasSecret bool
 	return probe.AuthClientSecretPost
 }
 
-// resolveBearerMethod picks how to present the token to the resource: the first
-// advertised method, defaulting to "header" (RFC 6750 §2.1).
-func resolveBearerMethod(advertised []string) string {
-	if len(advertised) > 0 {
-		return advertised[0]
-	}
-	return "header"
-}
-
 // registrationGrantTypes is what to ask for on DCR: the grants this run can
 // exercise, intersected with what the AS says it supports. Asking for
 // client_credentials at an AS that does not offer it gets the whole
@@ -125,7 +116,6 @@ func Resolve(ctx context.Context, client *http.Client, d Discovered, opts Resolv
 		UsePAR:          d.RequirePushedAuthorizationRequests,
 		PAREndpoint:     d.PushedAuthorizationRequestEndpoint,
 	}
-	plan.BearerMethod = resolveBearerMethod(d.PRMBearerMethodsSupported)
 	plan.DPoPRequired = d.PRMDPoPBoundAccessTokensRequired
 
 	// only register a client when none was supplied and the AS advertises a

@@ -52,6 +52,56 @@ func TestRFC8707_MultipleResources(t *testing.T) {
 	}
 }
 
+// the audience question the client_credentials probes above cannot reach on a
+// server that only offers authorization_code — which is every public MCP
+// server we have looked at.
+func TestRFC8707_AuthCodeAudienceReflectsResource(t *testing.T) {
+	as := fakeas.NewAS(fakeas.Violations{})
+	defer as.Close()
+	rs := fakeas.NewRS(as.URL, fakeas.RSViolations{})
+	defer rs.Close()
+	resource := rs.URL + "/mcp"
+
+	for _, tc := range []struct {
+		name  string
+		token string
+		want  Status
+		kind  SkipKind
+	}{
+		{"bound to the resource", as.MintToken(map[string]any{"sub": "u", "aud": resource}), StatusPass, ""},
+		{"bound elsewhere", as.MintToken(map[string]any{"sub": "u", "aud": "https://other.example"}), StatusFail, ""},
+		{"no audience at all", as.MintToken(map[string]any{"sub": "u"}), StatusFail, ""},
+		{"opaque token", "opaque-reference-token", StatusSkip, SkipUntested},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tgt := &Target{MCPURL: resource}
+			(&Runner{Registry: DefaultRegistry()}).Run(tgt)
+			tgt.Creds.SubjectToken = tc.token
+			tgt.Creds.AuthCodeAvailable = true
+
+			got := runChecksFor(t, "RFC 8707", tgt)["rfc8707.authcode.aud_reflects_resource"]
+			if got.Status != tc.want || got.SkipKind != tc.kind {
+				t.Fatalf("want %s/%s, got %s/%s (%s)", tc.want, tc.kind, got.Status, got.SkipKind, got.Message)
+			}
+		})
+	}
+}
+
+func TestRFC8707_AuthCodeAudienceUntestedWithoutInteractiveRound(t *testing.T) {
+	as := fakeas.NewAS(fakeas.Violations{})
+	defer as.Close()
+	rs := fakeas.NewRS(as.URL, fakeas.RSViolations{})
+	defer rs.Close()
+
+	tgt := &Target{MCPURL: rs.URL + "/mcp"}
+	(&Runner{Registry: DefaultRegistry()}).Run(tgt)
+
+	got := runChecksFor(t, "RFC 8707", tgt)["rfc8707.authcode.aud_reflects_resource"]
+	if got.Status != StatusSkip || got.SkipKind != SkipUntested {
+		t.Fatalf("no --auth-code: want untested skip, got %s/%s (%s)", got.Status, got.SkipKind, got.Message)
+	}
+}
+
 func TestRFC8707_SkipsWithoutClient(t *testing.T) {
 	as := fakeas.NewAS(fakeas.Violations{})
 	defer as.Close()

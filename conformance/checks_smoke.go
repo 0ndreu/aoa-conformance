@@ -57,11 +57,14 @@ func registerSmoke(r *Registry) {
 }
 
 // presentWithRetry presents the token to the resource and retries once when the
-// resource answers a DPoP request with a use_dpop_nonce challenge. For the
-// default header method this is a real MCP JSON-RPC POST, so a non-401 answer
-// means the server actually served the call.
+// resource answers a DPoP request with a use_dpop_nonce challenge. The token
+// always rides the Authorization header on a real MCP JSON-RPC POST: that is
+// the presentation MCP §2.3 mandates of clients, and it is the only one a
+// server has to accept. What PRM advertises is judged separately by
+// mcp.token.header_method_advertised; presenting by an advertised method the
+// server does not read would blame the token for the advertisement's mistake.
 func presentWithRetry(t *Target, token string, key *probe.ProofKey) (*probe.Response, error) {
-	in := probe.PresentInput{ResourceURL: t.MCPURL, Token: token, Method: t.Plan.BearerMethod, DPoP: key}
+	in := probe.PresentInput{ResourceURL: t.MCPURL, Token: token, DPoP: key}
 	resp, err := probe.PresentToken(t.Context(), t.httpClient(), in)
 	if err != nil {
 		return nil, err

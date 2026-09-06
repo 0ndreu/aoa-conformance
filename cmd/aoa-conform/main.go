@@ -121,6 +121,11 @@ func run(o options, w io.Writer) int {
 		plan, _ := conformance.Resolve(ctx, tgt.Client, tgt.Discovered, ro)
 		tgt.Plan = plan
 		defer cleanupRegistration(ctx, tgt)
+		// --target names the resource the token is for, so the round sends it
+		// as the RFC 8707 resource indicator, which is what MCP asks of every
+		// client. In --issuer mode there is no resource to name. A server that
+		// rejects the parameter is a finding worth reporting, so there is no
+		// retry without it.
 		res, err := probe.RunAuthCode(ctx, probe.AuthCodeConfig{
 			AuthorizationEndpoint: tgt.Discovered.AuthorizationEndpoint,
 			TokenEndpoint:         tgt.Discovered.TokenEndpoint,
@@ -129,6 +134,7 @@ func run(o options, w io.Writer) int {
 			Scopes:                plan.Scopes,
 			UsePAR:                plan.UsePAR,
 			PAREndpoint:           plan.PAREndpoint,
+			Resource:              o.Target,
 			HTTPClient:            tgt.Client,
 			Listener:              ln,
 		})
@@ -154,6 +160,7 @@ func run(o options, w io.Writer) int {
 					ClientSecret:          plan.ClientSecret,
 					UsePAR:                plan.UsePAR,
 					PAREndpoint:           plan.PAREndpoint,
+					Resource:              o.Target,
 					HTTPClient:            tgt.Client,
 				}, []string{scopes[0]}, []string{scopes[1]})
 				if serr != nil {
