@@ -43,9 +43,12 @@ func TestDPoP_NonceChallenge(t *testing.T) {
 		t.Fatalf("want pass, got %s (%s)", got.Status, got.Message)
 	}
 
-	bad := dpopTarget(t, fakeas.Violations{SkipDPoPNonce: true})
-	if got := runChecksFor(t, "RFC 9449", bad)["dpop.token.nonce_challenge"]; got.Status != StatusFail {
-		t.Fatalf("skip nonce: want fail, got %s (%s)", got.Status, got.Message)
+	// RFC 9449 §9 makes nonce use optional (a MAY for the AS); one that issues
+	// the token on first contact without ever demanding a nonce isn't violating
+	// anything, so this must not report a fail.
+	skips := dpopTarget(t, fakeas.Violations{SkipDPoPNonce: true})
+	if got := runChecksFor(t, "RFC 9449", skips)["dpop.token.nonce_challenge"]; got.Status != StatusSkip || got.SkipKind != SkipUnsupported {
+		t.Fatalf("AS never demands a nonce: want skip/unsupported, got %s/%s (%s)", got.Status, got.SkipKind, got.Message)
 	}
 }
 

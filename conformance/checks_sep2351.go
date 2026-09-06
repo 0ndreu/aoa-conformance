@@ -11,10 +11,10 @@ import (
 
 func registerSEP2351(r *Registry) {
 	r.Add(Check{
-		ID: "sep2351.discovery.suffix_path", Profile: ProfileJuly28RC, RFC: "SEP-2351", Section: "well-known suffix",
+		ID: "sep2351.discovery.suffix_path", Profile: Profile2026_07, RFC: "SEP-2351", Section: "well-known suffix",
 		Severity:     SeverityMUST,
 		Description:  "RFC 9728 PRM is reachable at the suffix-inserted well-known path for the resource",
-		Precondition: func(t *Target) bool { return t.MCPURL != "" },
+		Precondition: needs(mcpTarget),
 		Run: func(t *Target) Result {
 			suffixURL, err := suffixPRMURL(t.MCPURL)
 			if err != nil {

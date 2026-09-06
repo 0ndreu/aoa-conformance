@@ -82,3 +82,50 @@ surfaces:
 		}
 	}
 }
+
+func TestSelectSurfacesResolvesAndErrors(t *testing.T) {
+	p := &Profiles{Surfaces: []ModelSurface{
+		{Name: "claude-web"}, {Name: "chatgpt"},
+	}}
+	got, err := SelectSurfaces(p, []string{"claude-web"})
+	if err != nil || len(got) != 1 || got[0].Name != "claude-web" {
+		t.Fatalf("select one: got %+v err %v", got, err)
+	}
+	all, err := SelectSurfaces(p, []string{"all"})
+	if err != nil || len(all) != 2 {
+		t.Fatalf("select all: got %d err %v", len(all), err)
+	}
+	if _, err := SelectSurfaces(p, []string{"nope"}); err == nil {
+		t.Fatal("unknown name must error")
+	}
+}
+
+func TestDefaultProfilesLoads(t *testing.T) {
+	p, err := DefaultProfiles()
+	if err != nil {
+		t.Fatalf("DefaultProfiles: %v", err)
+	}
+	if len(p.Surfaces) == 0 {
+		t.Fatal("expected at least one surface in the embedded corpus")
+	}
+}
+
+// TestEmbeddedCorpusValidatesAgainstRegistry is a regression guard: the
+// embedded corpus must always validate against DefaultRegistry()'s labels,
+// and it must actually exercise surfaces that carry requirements (not just
+// unscorable/bearer-only stubs).
+func TestEmbeddedCorpusValidatesAgainstRegistry(t *testing.T) {
+	p, err := DefaultProfiles()
+	if err != nil {
+		t.Fatalf("embedded corpus must validate against DefaultRegistry(): %v", err)
+	}
+	withReqs := 0
+	for _, s := range p.Surfaces {
+		if len(s.Requires) > 0 {
+			withReqs++
+		}
+	}
+	if withReqs == 0 {
+		t.Fatal("expected at least one surface with requirements")
+	}
+}

@@ -6,11 +6,18 @@ import (
 )
 
 func registerRFC9728(r *Registry) {
-	mk := func(id, section, desc string, pre func(*Target) bool, run func(*Target) Result) Check {
+	mk := func(id, section, desc string, pre func(*Target) (bool, SkipReason), run func(*Target) Result) Check {
 		return Check{ID: CheckID(id), Profile: ProfileCore, RFC: "RFC 9728", Section: section,
 			Severity: SeverityMUST, Description: desc, Precondition: pre, Run: run}
 	}
-	hasMCP := func(t *Target) bool { return t.MCPURL != "" }
+	hasMCP := needs(mcpTarget)
+	// the PRM must list an AS before "does that AS resolve" is a question.
+	advertisedAS := needs(mcpTarget, func(t *Target) SkipReason {
+		if len(t.Discovered.PRMAuthorizationServers) == 0 {
+			return Unsupported("PRM lists no authorization_servers")
+		}
+		return satisfied
+	})
 
 	r.Add(
 		mk("rfc9728.challenge.resource_metadata", "§5.1",
@@ -50,7 +57,7 @@ func registerRFC9728(r *Registry) {
 
 		mk("rfc9728.prm.as_resolvable", "§3.1",
 			"the advertised authorization server resolves to usable metadata",
-			func(t *Target) bool { return t.MCPURL != "" && len(t.Discovered.PRMAuthorizationServers) > 0 },
+			advertisedAS,
 			func(t *Target) Result {
 				if t.Discovered.TokenEndpoint == "" {
 					return Result{Status: StatusFail, Message: "advertised AS has no resolvable token_endpoint", Evidence: t.Discovered.RawASMetadata}

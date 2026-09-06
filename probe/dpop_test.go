@@ -1,10 +1,13 @@
 package probe
 
 import (
+	"crypto"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/lestrrat-go/jwx/v3/jwk"
 )
 
 // decodeJWS splits a compact JWS and returns its protected header + payload as
@@ -75,4 +78,55 @@ func TestDPoPProofTamperOptions(t *testing.T) {
 	if c2["nonce"] != "abc123" {
 		t.Fatalf("nonce not embedded: %v", c2["nonce"])
 	}
+}
+
+// TestThumbprintMatchesEmbeddedProofKey checks that the jkt we would compare
+// against an AS-issued cnf claim is the thumbprint of the very key the proof
+// carries in its jwk header — otherwise a DPoP-binding check would compare two
+// unrelated values and pass or fail for the wrong reason.
+func TestThumbprintMatchesEmbeddedProofKey(t *testing.T) {
+	k, err := NewProofKey()
+	if err != nil {
+		t.Fatalf("key: %v", err)
+	}
+	jkt, err := k.Thumbprint()
+	if err != nil {
+		t.Fatalf("thumbprint: %v", err)
+	}
+
+	proof, err := k.Proof(ProofParams{HTM: "POST", HTU: "https://issuer.example/token"})
+	if err != nil {
+		t.Fatalf("proof: %v", err)
+	}
+	hdr, _ := decodeJWS(t, proof)
+	embedded, ok := hdr["jwk"].(map[string]any)
+	if !ok {
+		t.Fatalf("proof header has no jwk: %v", hdr)
+	}
+	key, err := jwk.ParseKey(mustJSON(t, embedded))
+	if err != nil {
+		t.Fatalf("parse embedded jwk: %v", err)
+	}
+	tp, err := key.Thumbprint(crypto.SHA256)
+	if err != nil {
+		t.Fatalf("thumbprint of embedded jwk: %v", err)
+	}
+	if want := b64url(tp); jkt != want {
+		t.Fatalf("Thumbprint() = %q, embedded key thumbprint = %q", jkt, want)
+	}
+
+	// The thumbprint is a property of the key, not of the call.
+	again, _ := k.Thumbprint()
+	if again != jkt {
+		t.Fatalf("Thumbprint() not stable: %q then %q", jkt, again)
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	buf, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return buf
 }

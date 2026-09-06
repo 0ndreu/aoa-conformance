@@ -12,7 +12,7 @@ func TestRunnerRunsAllChecksAndTimesThem(t *testing.T) {
 	reg.Add(Check{ID: "x.pass", Profile: ProfileCore, RFC: "RFC X",
 		Run: func(*Target) Result { return Result{Status: StatusPass} }})
 	reg.Add(Check{ID: "x.skip", Profile: ProfileCore, RFC: "RFC X",
-		Precondition: func(*Target) bool { return false },
+		Precondition: func(*Target) (bool, SkipReason) { return false, Unsupported("nope") },
 		Run:          func(*Target) Result { return Result{Status: StatusPass} }})
 
 	tgt := &Target{Issuer: "https://issuer.example"}

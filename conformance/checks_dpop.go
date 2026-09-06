@@ -8,17 +8,21 @@ import (
 )
 
 func registerDPoP(r *Registry) {
-	needsDPoP := func(t *Target) bool {
-		return t.Discovered.advertisesDPoP() && t.Plan.hasClient()
+	dpopAdvertised := func(t *Target) SkipReason {
+		if !t.Discovered.advertisesDPoP() {
+			return Unsupported("AS does not advertise dpop_signing_alg_values_supported")
+		}
+		return satisfied
 	}
-	mk := func(id, section, desc string, sev Severity, pre func(*Target) bool, run func(*Target) Result) Check {
+	needsDPoP := needs(dpopAdvertised, clientCredentialsGrant, planClient)
+	mk := func(id, section, desc string, sev Severity, pre func(*Target) (bool, SkipReason), run func(*Target) Result) Check {
 		return Check{ID: CheckID(id), Profile: ProfileExtended, RFC: "RFC 9449", Section: section,
 			Severity: sev, Description: desc, Precondition: pre, Run: run}
 	}
 
 	r.Add(
 		mk("dpop.advertise.algs", "§5.1", "DPoP signing algorithms are advertised", SeverityMAY,
-			func(t *Target) bool { return t.Discovered.advertisesDPoP() },
+			needs(dpopAdvertised),
 			func(t *Target) Result {
 				return Result{Status: StatusPass,
 					Message: "DPoP algs advertised: " + strings.Join(t.Discovered.DPoPSigningAlgValuesSupported, ", ")}
@@ -32,6 +36,9 @@ func registerDPoP(r *Registry) {
 				}
 				if res.resp.StatusCode == 200 && res.resp.JSON()["access_token"] != nil {
 					return Result{Status: StatusPass, Message: "DPoP-bound token issued", Evidence: res.resp.Evidence}
+				}
+				if grantRejected(res.resp) {
+					return Result{Status: StatusSkip, SkipKind: SkipUntested, Message: "AS does not support client_credentials (unsupported_grant_type); pass --client-id at an AS offering it", Evidence: res.resp.Evidence}
 				}
 				return Result{Status: StatusFail, Message: "valid DPoP proof rejected", Evidence: res.resp.Evidence}
 			}),
@@ -53,6 +60,17 @@ func registerDPoP(r *Registry) {
 				if resp.StatusCode == 400 && resp.JSON()["error"] == "use_dpop_nonce" && resp.Header.Get("DPoP-Nonce") != "" {
 					return Result{Status: StatusPass, Message: "use_dpop_nonce challenge issued", Evidence: resp.Evidence}
 				}
+				if grantRejected(resp) {
+					return Result{Status: StatusSkip, SkipKind: SkipUntested, Message: "AS does not support client_credentials (unsupported_grant_type); pass --client-id at an AS offering it", Evidence: resp.Evidence}
+				}
+				if resp.StatusCode == 200 {
+					// RFC 9449 §9: nonce use is at the AS's discretion, never a MUST.
+					// An AS that issues the token on first contact without ever
+					// demanding a nonce is not violating anything.
+					return Result{Status: StatusSkip, SkipKind: SkipUnsupported,
+						Message:  "AS issues a DPoP-bound token without ever challenging for a nonce; RFC 9449 §9 makes nonce use optional",
+						Evidence: resp.Evidence}
+				}
 				return Result{Status: StatusFail, Message: "no use_dpop_nonce challenge on first contact", Evidence: resp.Evidence}
 			}),
 
@@ -61,6 +79,9 @@ func registerDPoP(r *Registry) {
 				res := dpopExchange(t)
 				if res.err != nil {
 					return Result{Status: StatusError, Message: res.err.Error()}
+				}
+				if grantRejected(res.resp) {
+					return Result{Status: StatusSkip, SkipKind: SkipUntested, Message: "AS does not support client_credentials (unsupported_grant_type); pass --client-id at an AS offering it", Evidence: res.resp.Evidence}
 				}
 				if res.resp.StatusCode != 200 {
 					return Result{Status: StatusFail, Message: "DPoP token request failed", Evidence: res.resp.Evidence}
@@ -99,6 +120,9 @@ func registerDPoP(r *Registry) {
 				}
 				if resp.StatusCode == 200 {
 					return Result{Status: StatusFail, Message: "wrong-htu proof accepted", Evidence: resp.Evidence}
+				}
+				if grantRejected(resp) {
+					return Result{Status: StatusSkip, SkipKind: SkipUntested, Message: "AS does not support client_credentials (unsupported_grant_type); pass --client-id at an AS offering it", Evidence: resp.Evidence}
 				}
 				return Result{Status: StatusPass, Message: "wrong-htu proof rejected", Evidence: resp.Evidence}
 			}),

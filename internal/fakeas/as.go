@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/0ndreu/aoa-conformance/probe"
@@ -43,6 +44,7 @@ type Violations struct {
 	IgnoreRevoke bool // accept the revoke request but keep the token active
 
 	NoRegistration          bool // do not advertise/serve registration_endpoint
+	RejectRegistration      bool // advertise registration_endpoint but reject every request
 	RegistrationRequiresIAT bool // 401 unless an initial access token is presented
 	MangleApplicationType   bool // echo a different application_type than requested (SEP-837)
 	ForeignRegistrationURI  bool // return a registration_client_uri on a different origin than the issuer (SEP-2352)
@@ -56,7 +58,14 @@ type Violations struct {
 	EmitSignedMetadata bool // include a JWT signed_metadata in discovery
 	BadSignedMetadata  bool // sign signed_metadata with a throwaway key (invalid)
 
+	PublicClientsOnly      bool // advertise only token_endpoint_auth_method "none"; DCR issues no secret
+	NoClientCredentials    bool // do not advertise, and reject, the client_credentials grant
+	NoGrantTypesAdvertised bool // omit grant_types_supported from discovery entirely (RFC 8414 permits this; the AS may still not support client_credentials)
+
 	IssParamSupported bool // advertise authorization_response_iss_parameter_supported
+
+	AdvertiseCIMD    bool // advertise client_id_metadata_document_supported
+	RejectCIMDClient bool // advertise CIMD but reject a URL client_id at /authorize
 }
 
 // AS is a controllable fake authorization server.
@@ -65,11 +74,22 @@ type AS struct {
 	v      Violations
 	signer *probe.Signer
 
-	mu             sync.Mutex
-	lastForm       url.Values
-	lastClientAuth string
-	lastPARForm    url.Values
-	revoked        map[string]bool
+	mu               sync.Mutex
+	minted           int // serial number handed to every issued token, so no two are byte-identical
+	lastForm         url.Values
+	lastClientAuth   string
+	lastPARForm      url.Values
+	lastRegistration map[string]any
+	deletedClients   []string
+	revoked          map[string]bool
+}
+
+// LastRegistration returns the JSON body of the most recent /register request,
+// so tests can assert what the client asked to be registered as.
+func (as *AS) LastRegistration() map[string]any {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	return as.lastRegistration
 }
 
 // LastPARForm returns the form values of the most recent /par request, so tests
@@ -107,6 +127,8 @@ func NewAS(v Violations) *AS {
 	mux.HandleFunc("/jwks", as.handleJWKS)
 	mux.HandleFunc("/token", as.handleToken)
 	mux.HandleFunc("/register", as.handleRegister)
+	mux.HandleFunc("/register/", as.handleClientConfig)
+	mux.HandleFunc("/authorize", as.handleAuthorize)
 	mux.HandleFunc("/par", as.handlePAR)
 	mux.HandleFunc("/introspect", as.handleIntrospect)
 	mux.HandleFunc("/revoke", as.handleRevoke)
@@ -115,9 +137,18 @@ func NewAS(v Violations) *AS {
 }
 
 // MintToken signs a token with the AS's key (use it to build subject/actor tokens).
+// Every token gets a distinct jti unless the caller pinned one: a real AS never
+// hands out the same token string twice, and identical strings would let one
+// check's revocation invalidate the token another check obtains later.
 func (as *AS) MintToken(claims map[string]any) string {
 	if claims["iss"] == nil {
 		claims["iss"] = as.URL
+	}
+	if claims["jti"] == nil {
+		as.mu.Lock()
+		as.minted++
+		claims["jti"] = fmt.Sprintf("tok-%d", as.minted)
+		as.mu.Unlock()
 	}
 	t, err := as.signer.SignJWT(claims)
 	if err != nil {
@@ -135,7 +166,10 @@ func (as *AS) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 	if as.v.MalformedDiscovery {
 		issuer = "https://wrong-issuer.example" // violates RFC 8414 issuer-match
 	}
-	grants := []string{"authorization_code", "client_credentials"}
+	grants := []string{"authorization_code"}
+	if !as.v.NoClientCredentials {
+		grants = append(grants, "client_credentials")
+	}
 	if !as.v.NoTokenExchange {
 		grants = append(grants, probe.GrantTokenExchange)
 	}
@@ -148,8 +182,10 @@ func (as *AS) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 		"token_endpoint":                   as.URL + "/token",
 		"authorization_endpoint":           as.URL + "/authorize",
 		"jwks_uri":                         as.URL + "/jwks",
-		"grant_types_supported":            grants,
 		"code_challenge_methods_supported": pkce,
+	}
+	if !as.v.NoGrantTypesAdvertised {
+		doc["grant_types_supported"] = grants
 	}
 	if !as.v.NoDPoP {
 		doc["dpop_signing_alg_values_supported"] = []string{"ES256"}
@@ -158,6 +194,9 @@ func (as *AS) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 		doc["registration_endpoint"] = as.URL + "/register"
 	}
 	doc["token_endpoint_auth_methods_supported"] = []string{"client_secret_basic", "client_secret_post"}
+	if as.v.PublicClientsOnly {
+		doc["token_endpoint_auth_methods_supported"] = []string{"none"}
+	}
 	if as.v.RequirePAR {
 		doc["require_pushed_authorization_requests"] = true
 		if !as.v.NoPAREndpoint {
@@ -187,6 +226,9 @@ func (as *AS) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 	if as.v.IssParamSupported {
 		doc["authorization_response_iss_parameter_supported"] = true
 	}
+	if as.v.AdvertiseCIMD {
+		doc["client_id_metadata_document_supported"] = true
+	}
 	writeJSON(w, 200, doc)
 }
 
@@ -210,12 +252,23 @@ func (as *AS) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if body, _ := io.ReadAll(r.Body); len(body) > 0 {
 		_ = json.Unmarshal(body, &req)
 	}
+	as.mu.Lock()
+	as.lastRegistration = req
+	as.mu.Unlock()
+	if as.v.RejectRegistration {
+		as.tokenError(w, 400, "invalid_client_metadata", "registration refused")
+		return
+	}
 	resp := map[string]any{
 		"client_id":                  "dcr-client",
 		"client_secret":              "dcr-secret",
 		"registration_access_token":  "rat-123",
 		"registration_client_uri":    as.URL + "/register/dcr-client",
 		"token_endpoint_auth_method": "client_secret_post",
+	}
+	if as.v.PublicClientsOnly {
+		delete(resp, "client_secret")
+		resp["token_endpoint_auth_method"] = "none"
 	}
 	if at, ok := req["application_type"].(string); ok && at != "" {
 		if as.v.MangleApplicationType {
@@ -228,6 +281,69 @@ func (as *AS) handleRegister(w http.ResponseWriter, r *http.Request) {
 		resp["registration_client_uri"] = "https://evil.example/register/dcr-client"
 	}
 	writeJSON(w, 201, resp)
+}
+
+// handleClientConfig serves the RFC 7591 §4 client-configuration endpoint this
+// AS hands out as registration_client_uri. Only DELETE is implemented: it is
+// the cleanup a run performs on the ephemeral client it registered.
+func (as *AS) handleClientConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(405)
+		return
+	}
+	if r.Header.Get("Authorization") != "Bearer rat-123" {
+		w.WriteHeader(401)
+		return
+	}
+	as.mu.Lock()
+	as.deletedClients = append(as.deletedClients, strings.TrimPrefix(r.URL.Path, "/register/"))
+	as.mu.Unlock()
+	w.WriteHeader(204)
+}
+
+// DeletedClients returns the client ids deleted through the client-configuration
+// endpoint, so a test can assert the run cleaned up after itself.
+func (as *AS) DeletedClients() []string {
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	return append([]string(nil), as.deletedClients...)
+}
+
+// handleAuthorize is a minimal authorization endpoint. It accepts a URL
+// client_id (CIMD) only when this AS advertises CIMD and can fetch the document;
+// otherwise it redirects back with invalid_client. A conventional client_id is
+// accepted unconditionally. It never renders a login page; it redirects.
+func (as *AS) handleAuthorize(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	clientID := q.Get("client_id")
+	redirect := q.Get("redirect_uri")
+	state := q.Get("state")
+	if strings.HasPrefix(clientID, "http://") || strings.HasPrefix(clientID, "https://") {
+		if !as.v.AdvertiseCIMD {
+			redirectAuth(w, redirect, "error=invalid_client", state)
+			return
+		}
+		resp, err := http.Get(clientID) // fetch the client-metadata document
+		if err == nil {
+			defer resp.Body.Close()
+		}
+		if err != nil || resp.StatusCode != 200 {
+			redirectAuth(w, redirect, "error=invalid_client", state)
+			return
+		}
+		if as.v.RejectCIMDClient {
+			redirectAuth(w, redirect, "error=invalid_client", state)
+			return
+		}
+	}
+	redirectAuth(w, redirect, "code=fake-code", state)
+}
+
+// redirectAuth writes a 302 back to redirect with the given query fragment and state.
+func redirectAuth(w http.ResponseWriter, redirect, kv, state string) {
+	loc := redirect + "?" + kv + "&state=" + url.QueryEscape(state)
+	w.Header().Set("Location", loc)
+	w.WriteHeader(302)
 }
 
 func (as *AS) handleJWKS(w http.ResponseWriter, _ *http.Request) {
@@ -265,7 +381,13 @@ func (as *AS) handleToken(w http.ResponseWriter, r *http.Request) {
 	case probe.GrantTokenExchange:
 		as.handleExchange(w, r, dpop, jkt)
 	case "client_credentials":
+		if as.v.NoClientCredentials {
+			as.tokenError(w, 400, "unsupported_grant_type", "client_credentials not supported")
+			return
+		}
 		as.handleClientCredentials(w, r, dpop, jkt)
+	case "refresh_token":
+		as.handleRefresh(w, r, dpop, jkt)
 	default:
 		if as.v.AcceptUnknownGrant {
 			writeJSON(w, 200, map[string]any{"access_token": as.MintToken(map[string]any{"sub": "unknown-grant"}), "token_type": "Bearer"})
@@ -329,6 +451,22 @@ func (as *AS) handleClientCredentials(w http.ResponseWriter, r *http.Request, dp
 	}
 	as.bindCnf(claims, dpop, jkt)
 	writeJSON(w, 200, map[string]any{"access_token": as.MintToken(claims), "token_type": as.tokenType(dpop)})
+}
+
+// handleRefresh issues a token for a refresh_token grant, echoing the requested
+// scope. WidenScope makes it echo a broader scope than requested (a violation).
+func (as *AS) handleRefresh(w http.ResponseWriter, r *http.Request, dpop bool, jkt string) {
+	scope := r.Form.Get("scope")
+	if as.v.WidenScope && scope != "" {
+		scope = scope + " extra.scope"
+	}
+	claims := map[string]any{"sub": "refresh-sub"}
+	as.bindCnf(claims, dpop, jkt)
+	out := map[string]any{"access_token": as.MintToken(claims), "token_type": as.tokenType(dpop)}
+	if scope != "" {
+		out["scope"] = scope
+	}
+	writeJSON(w, 200, out)
 }
 
 // bindCnf binds the DPoP proof key thumbprint into the issued token's cnf.jkt,

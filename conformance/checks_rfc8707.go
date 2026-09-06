@@ -10,7 +10,7 @@ func registerRFC8707(r *Registry) {
 	mk := func(id, section, desc string, sev Severity, run func(*Target) Result) Check {
 		return Check{ID: CheckID(id), Profile: ProfileCore, RFC: "RFC 8707", Section: section,
 			Severity: sev, Description: desc,
-			Precondition: func(t *Target) bool { return t.Plan.hasClient() },
+			Precondition: needs(tokenEndpoint, clientCredentialsGrant, planClient),
 			Run:          run}
 	}
 
@@ -36,6 +36,9 @@ func registerRFC8707(r *Registry) {
 				if resp.JSON()["error"] == "invalid_target" {
 					return Result{Status: StatusFail, Message: "legitimate resource rejected with invalid_target", Evidence: resp.Evidence}
 				}
+				if grantRejected(resp) {
+					return Result{Status: StatusSkip, SkipKind: SkipUntested, Message: "AS does not support client_credentials (unsupported_grant_type); pass --client-id at an AS offering it", Evidence: resp.Evidence}
+				}
 				return Result{Status: StatusFail, Message: "resource request rejected", Evidence: resp.Evidence}
 			}),
 
@@ -44,6 +47,9 @@ func registerRFC8707(r *Registry) {
 				resp, err := ccForm(t, rfc8707ProbeResource)
 				if err != nil {
 					return Result{Status: StatusError, Message: err.Error()}
+				}
+				if grantRejected(resp) {
+					return Result{Status: StatusSkip, SkipKind: SkipUntested, Message: "AS does not support client_credentials (unsupported_grant_type); pass --client-id at an AS offering it", Evidence: resp.Evidence}
 				}
 				if resp.StatusCode != 200 {
 					return Result{Status: StatusFail, Message: "resource request rejected", Evidence: resp.Evidence}
@@ -64,6 +70,9 @@ func registerRFC8707(r *Registry) {
 				}
 				if resp.StatusCode >= 500 {
 					return Result{Status: StatusFail, Message: "server error on repeated resource", Evidence: resp.Evidence}
+				}
+				if grantRejected(resp) {
+					return Result{Status: StatusSkip, SkipKind: SkipUntested, Message: "AS does not support client_credentials (unsupported_grant_type); pass --client-id at an AS offering it", Evidence: resp.Evidence}
 				}
 				return Result{Status: StatusPass, Message: "multiple resources handled", Evidence: resp.Evidence}
 			}),

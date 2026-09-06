@@ -4,10 +4,10 @@ import "net/url"
 
 func registerSEP2352(r *Registry) {
 	r.Add(Check{
-		ID: "sep2352.register.issuer_binding", Profile: ProfileJuly28RC, RFC: "SEP-2352", Section: "DCR coherence",
-		Severity:     SeveritySHOULD,
+		ID: "sep2352.register.issuer_binding", Profile: Profile2026_07, RFC: "SEP-2352", Section: "DCR coherence",
+		Severity:     SeverityMUST,
 		Description:  "the DCR-issued registration_client_uri is bound to the AS issuer origin (no cross-issuer reuse)",
-		Precondition: func(t *Target) bool { return t.Plan.Registered },
+		Precondition: needs(registrationEndpoint, registeredClient),
 		Run: func(t *Target) Result {
 			rcu := t.Plan.RegistrationClientURI
 			if rcu == "" {

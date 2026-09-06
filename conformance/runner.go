@@ -40,10 +40,23 @@ func (r *Runner) Run(t *Target) Report {
 		plan, _ := Resolve(t.Context(), t.httpClient(), t.Discovered, *r.ResolveOpts)
 		t.Plan = plan
 	}
+	// an AS that advertises a registration_endpoint and then refuses to
+	// register is a finding in its own right, and the reason the credentialed
+	// tier is empty. Say so instead of leaving it to be inferred from skips.
+	if t.Plan.RegistrationError != "" {
+		rep.Entries = append(rep.Entries, Entry{
+			Check: Check{ID: "registration", Profile: ProfileCore, RFC: "RFC 7591", Section: "§3.2",
+				Severity: SeveritySHOULD, Description: "an advertised registration_endpoint issues a client"},
+			Result: Result{Status: StatusError,
+				Message:  "dynamic client registration failed: " + t.Plan.RegistrationError,
+				Evidence: t.Plan.RegistrationEvidence},
+		})
+	}
 
 	for _, c := range r.Registry.Checks() {
 		rep.Entries = append(rep.Entries, Entry{Check: c, Result: evaluateSafely(c, t)})
 	}
+	rep.Capabilities = Capabilities(rep.Entries)
 	return rep
 }
 
@@ -80,12 +93,16 @@ func Discover(t *Target) error {
 			GrantTypesSupported:              d.GrantTypesSupported,
 			CodeChallengeMethodsSupported:    d.CodeChallengeMethodsSupported,
 			DPoPSigningAlgValuesSupported:    d.DPoPSigningAlgValuesSupported,
+			PRMResource:                      d.PRMResource,
 			PRMAuthorizationServers:          d.PRMAuthorizationServers,
 			PRMScopesSupported:               d.PRMScopesSupported,
 			PRMBearerMethodsSupported:        d.PRMBearerMethodsSupported,
 			PRMDPoPBoundAccessTokensRequired: d.PRMDPoPBoundAccessTokensRequired,
 			RawASMetadata:                    d.RawASMetadata,
 			RawPRM:                           d.RawPRM,
+			MCPEra:                           string(d.MCPEra),
+			MCPProtocolVersion:               d.MCPProtocolVersion,
+			MCPSupportedVersions:             d.MCPSupportedVersions,
 
 			RegistrationEndpoint:               d.RegistrationEndpoint,
 			TokenEndpointAuthMethodsSupported:  d.TokenEndpointAuthMethodsSupported,
@@ -99,6 +116,7 @@ func Discover(t *Target) error {
 			SignedMetadata:                             d.SignedMetadata,
 			TLSClientCertificateBoundAccessTokens:      d.TLSClientCertificateBoundAccessTokens,
 			MTLSEndpointAliases:                        d.MTLSEndpointAliases,
+			ClientIDMetadataDocumentSupported:          d.ClientIDMetadataDocumentSupported,
 		}
 		if t.Hints == nil {
 			t.Hints = map[string]string{}

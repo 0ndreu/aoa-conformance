@@ -39,3 +39,20 @@ func TestApplyClientAuth_NoSecretIsAnonymous(t *testing.T) {
 		t.Fatalf("no secret: client_id only, got %v", form)
 	}
 }
+
+// TestImplementsClientAuthGatesUnsupportedMethods pins which
+// token_endpoint_auth_method values resolveTokenAuthMethod may pick. Claiming
+// a method we cannot perform would turn every credentialed check into an
+// unexplained token-endpoint failure.
+func TestImplementsClientAuthGatesUnsupportedMethods(t *testing.T) {
+	for _, m := range []string{AuthClientSecretPost, AuthClientSecretBasic, AuthNone} {
+		if !ImplementsClientAuth(m) {
+			t.Errorf("ImplementsClientAuth(%q) = false, but ApplyClientAuth handles it", m)
+		}
+	}
+	for _, m := range []string{"private_key_jwt", "client_secret_jwt", "tls_client_auth", "", "None"} {
+		if ImplementsClientAuth(m) {
+			t.Errorf("ImplementsClientAuth(%q) = true, but ApplyClientAuth cannot perform it", m)
+		}
+	}
+}

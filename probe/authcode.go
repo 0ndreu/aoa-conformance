@@ -28,8 +28,10 @@ func VerifyPKCE(verifier, challenge string) bool {
 
 // AuthCodeResult is the outcome of the interactive flow.
 type AuthCodeResult struct {
-	AccessToken string
-	CallbackISS string // RFC 9207 iss from the authorization response, if present
+	AccessToken  string
+	RefreshToken string // captured for SEP-2207 / SEP-2350 deep-flow probes
+	GrantedScope string // the scope the token endpoint reported granting
+	CallbackISS  string // RFC 9207 iss from the authorization response, if present
 }
 
 // AuthCodeConfig configures the interactive flow.
@@ -178,7 +180,9 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (AuthCodeResult, error
 	if at == "" {
 		return AuthCodeResult{}, fmt.Errorf("token endpoint returned no access_token (HTTP %d)", resp.StatusCode)
 	}
-	return AuthCodeResult{AccessToken: at, CallbackISS: callbackISS}, nil
+	rt, _ := resp.JSON()["refresh_token"].(string)
+	sc, _ := resp.JSON()["scope"].(string)
+	return AuthCodeResult{AccessToken: at, RefreshToken: rt, GrantedScope: sc, CallbackISS: callbackISS}, nil
 }
 
 func httpClientOrDefault(c *http.Client) *http.Client {

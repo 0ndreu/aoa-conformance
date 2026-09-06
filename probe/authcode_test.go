@@ -67,6 +67,33 @@ func TestAuthCodeFlowAgainstAutoConsentAS(t *testing.T) {
 	}
 }
 
+func TestAuthCodeCapturesRefreshTokenAndScope(t *testing.T) {
+	as := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/authorize":
+			redir := r.URL.Query().Get("redirect_uri")
+			state := r.URL.Query().Get("state")
+			http.Redirect(w, r, fmt.Sprintf("%s?code=C&state=%s", redir, state), http.StatusFound)
+		case "/token":
+			fmt.Fprint(w, `{"access_token":"AT","refresh_token":"RT","scope":"a b","token_type":"Bearer"}`)
+		}
+	}))
+	defer as.Close()
+
+	res, err := RunAuthCode(context.Background(), AuthCodeConfig{
+		AuthorizationEndpoint: as.URL + "/authorize",
+		TokenEndpoint:         as.URL + "/token",
+		ClientID:              "c",
+		openBrowser:           func(u string) error { go http.Get(u); return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.RefreshToken != "RT" || res.GrantedScope != "a b" {
+		t.Fatalf("got refresh=%q scope=%q", res.RefreshToken, res.GrantedScope)
+	}
+}
+
 func TestRunAuthCode_PushesPARFirst(t *testing.T) {
 	var parHit bool
 	var authQuery url.Values

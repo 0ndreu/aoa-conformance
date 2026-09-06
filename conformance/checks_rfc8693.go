@@ -9,13 +9,21 @@ import (
 
 func registerRFC8693(r *Registry) {
 	// extended capability + Tier-2 subject token are required for most checks.
-	needsExchange := func(t *Target) bool {
-		return t.Discovered.advertisesTokenExchange() && t.Creds.hasSubject()
+	exchangeAdvertised := func(t *Target) SkipReason {
+		if !t.Discovered.advertisesTokenExchange() {
+			return Unsupported("AS does not advertise the urn:ietf:params:oauth:grant-type:token-exchange grant")
+		}
+		return satisfied
 	}
-	needsDelegation := func(t *Target) bool {
-		return needsExchange(t) && t.Hints["actor_token"] != ""
+	actorToken := func(t *Target) SkipReason {
+		if t.Hints["actor_token"] == "" {
+			return Untested("no actor token available for a delegation exchange")
+		}
+		return satisfied
 	}
-	mk := func(id, section, desc string, sev Severity, pre func(*Target) bool, run func(*Target) Result) Check {
+	needsExchange := needs(exchangeAdvertised, subjectToken)
+	needsDelegation := needs(exchangeAdvertised, subjectToken, actorToken)
+	mk := func(id, section, desc string, sev Severity, pre func(*Target) (bool, SkipReason), run func(*Target) Result) Check {
 		return Check{ID: CheckID(id), Profile: ProfileExtended, RFC: "RFC 8693", Section: section,
 			Severity: sev, Description: desc, Precondition: pre, Run: run}
 	}

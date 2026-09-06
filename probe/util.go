@@ -24,3 +24,7 @@ func S256(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return b64url(sum[:])
 }
+
+// RandToken returns an unguessable opaque string in the RFC 6750 b64token
+// charset. Checks that must present a token no server ever issued use it.
+func RandToken() string { return randHex(24) }

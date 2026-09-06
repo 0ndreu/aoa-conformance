@@ -5,7 +5,7 @@ import "testing"
 func TestCheckSkipsWhenPreconditionFalse(t *testing.T) {
 	c := Check{
 		ID:           "test.always_skip",
-		Precondition: func(*Target) bool { return false },
+		Precondition: func(*Target) (bool, SkipReason) { return false, Untested("no reason given") },
 		Run:          func(_ *Target) Result { return Result{Status: StatusPass} },
 	}
 	if got := c.Evaluate(&Target{}); got.Status != StatusSkip {
@@ -16,7 +16,7 @@ func TestCheckSkipsWhenPreconditionFalse(t *testing.T) {
 func TestCheckRunsWhenPreconditionTrue(t *testing.T) {
 	c := Check{
 		ID:           "test.runs",
-		Precondition: func(*Target) bool { return true },
+		Precondition: func(*Target) (bool, SkipReason) { return true, satisfied },
 		Run:          func(_ *Target) Result { return Result{Status: StatusFail, Message: "boom"} },
 	}
 	if got := c.Evaluate(&Target{}); got.Status != StatusFail || got.Message != "boom" {
