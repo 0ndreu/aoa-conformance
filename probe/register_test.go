@@ -37,6 +37,49 @@ func TestRegister_Success(t *testing.T) {
 	}
 }
 
+func TestRegisterSendsClientName(t *testing.T) {
+	var seen map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &seen)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		_, _ = w.Write([]byte(`{"client_id":"c"}`))
+	}))
+	defer srv.Close()
+
+	_, err := Register(context.Background(), srv.Client(), RegisterInput{
+		RegistrationEndpoint: srv.URL,
+		ClientName:           "aoa-conformance",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen["client_name"] != "aoa-conformance" {
+		t.Fatalf("request client_name = %v, want aoa-conformance", seen["client_name"])
+	}
+}
+
+func TestRegisterOmitsClientNameWhenUnset(t *testing.T) {
+	var seen map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &seen)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		_, _ = w.Write([]byte(`{"client_id":"c"}`))
+	}))
+	defer srv.Close()
+
+	_, err := Register(context.Background(), srv.Client(), RegisterInput{RegistrationEndpoint: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := seen["client_name"]; ok {
+		t.Fatalf("request sent client_name=%v; RFC 7591 makes it optional", seen["client_name"])
+	}
+}
+
 func TestRegisterSendsAndCapturesApplicationType(t *testing.T) {
 	var seen map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -95,6 +95,7 @@ type ResolveOptions struct {
 	ClientSecret      string
 	TokenAuthMethod   string   // explicit --token-auth-method
 	RegistrationToken string   // --registration-token (RFC 7591 initial access token)
+	ClientName        string   // --client-name (RFC 7591 client_name); omit from DCR when empty
 	Scopes            []string // explicit --scope
 	RedirectURIs      []string // for DCR; the auth-code callback URI when known
 }
@@ -132,6 +133,7 @@ func Resolve(ctx context.Context, client *http.Client, d Discovered, opts Resolv
 			TokenEndpointAuthMethod: plan.TokenAuthMethod,
 			Scope:                   strings.Join(plan.Scopes, " "),
 			ApplicationType:         registrationApplicationType(redirects),
+			ClientName:              opts.ClientName,
 			InitialAccessToken:      opts.RegistrationToken,
 		})
 		if err != nil {

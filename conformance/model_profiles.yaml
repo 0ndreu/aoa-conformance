@@ -1,0 +1,127 @@
+version: 1
+data_date: "2026-09-05"
+surfaces:
+  - name: claude-web
+    vendor: Anthropic
+    display: "Claude (claude.ai / Desktop / Code)"
+    requires:
+      - id: oauth-2.1
+        criticality: mandatory
+        rationale: "runs a standard OAuth 2.1 authorization-code flow as the MCP client"
+        source: "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization"
+        rank: primary
+      - id: rfc-7636
+        criticality: mandatory
+        rationale: "requires PKCE S256 and refuses to proceed if the AS omits code_challenge_methods_supported; confirmed sending code_challenge with code_challenge_method=S256 on every authorization request"
+        source: "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization"
+        rank: primary
+      - id: rfc-9728
+        criticality: mandatory
+        rationale: "discovers the AS via protected-resource metadata: reads the 401 WWW-Authenticate resource_metadata hint and fetches the protected-resource document"
+        source: "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization"
+        rank: primary
+      - id: rfc-8414
+        criticality: mandatory
+        rationale: "fetches AS metadata (.well-known/oauth-authorization-server or openid-configuration) to learn endpoints and supported features; a March-2026 community bug thread (github.com/anthropics/claude-ai-mcp#82) showed a path-aware-discovery edge case that dropped to synthesized default endpoints, but Anthropic confirmed the general case honors the fetched endpoints exactly and shipped a fix for the edge case"
+        source: "https://sunpeak.ai/blogs/claude-connector-oauth-authentication/"
+        rank: secondary
+      - id: rfc-8707
+        criticality: mandatory
+        rationale: "spec requires the resource parameter on every authorization/token request for audience-bound tokens; this is the MCP-spec-conformance requirement, not an independently confirmed Claude-specific observation (no vendor doc or bug thread found during citation review that explicitly discusses Claude's resource-parameter behavior)"
+        source: "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization"
+        rank: secondary
+      - any_of: [cimd, sep-837]
+        criticality: mandatory
+        rationale: "needs some way to obtain a client identity. MCP 2026-07-28 made Client-ID Metadata Documents the way to do it and deprecated Dynamic Client Registration, so CIMD is the forward path and a working DCR endpoint the still-accepted fallback; a server offering neither leaves the connector with no client id to present"
+        source: "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization"
+        rank: secondary
+
+  - name: claude-api
+    vendor: Anthropic
+    display: "Claude API MCP connector"
+    note: "bring-your-own-bearer: the developer supplies authorization_token; no OAuth discovery. Any server that validates the supplied token is compatible."
+    requires: []
+
+  - name: chatgpt
+    vendor: OpenAI
+    display: "ChatGPT connectors / Apps SDK"
+    note: "prefers CIMD over DCR; either satisfies registration. Rejects m2m/API-key/customer-mTLS auth."
+    requires:
+      - id: oauth-2.1
+        criticality: mandatory
+        rationale: "performs the authorization-code flow with PKCE using the S256 code challenge so intercepted authorization codes cannot be replayed; non-2.1 auth (m2m/API-key/mTLS) is rejected"
+        source: "https://developers.openai.com/apps-sdk/build/auth"
+        rank: primary
+      - id: rfc-7636
+        criticality: mandatory
+        rationale: "requires authorization-code + PKCE S256"
+        source: "https://developers.openai.com/apps-sdk/build/auth"
+        rank: primary
+      - id: rfc-9728
+        criticality: mandatory
+        rationale: "discovers the AS via protected-resource metadata returned by the server's discovery endpoint"
+        source: "https://developers.openai.com/apps-sdk/build/auth"
+        rank: primary
+      - id: rfc-8414
+        criticality: mandatory
+        rationale: "the identity provider must expose a well-known discovery document (oauth-authorization-server or openid-configuration) so ChatGPT can read its configuration"
+        source: "https://developers.openai.com/apps-sdk/build/auth"
+        rank: primary
+      - id: rfc-8707
+        criticality: mandatory
+        rationale: "appends resource=<canonical MCP URL> to both the authorization and token requests, tying the token back to the protected-resource metadata"
+        source: "https://developers.openai.com/apps-sdk/build/auth"
+        rank: primary
+      - any_of: [cimd, sep-837]
+        criticality: mandatory
+        rationale: "uses an HTTPS metadata-document URL as its client_id when the AS supports CIMD; otherwise runs DCR once per connector instance and reuses the registered client. MCP 2026-07-28 deprecated DCR in favour of CIMD, so the DCR half of this pair is the legacy path"
+        source: "https://developers.openai.com/apps-sdk/build/auth"
+        rank: primary
+
+  - name: openai-responses
+    vendor: OpenAI
+    display: "OpenAI Responses API MCP tool"
+    note: "bearer-only: the developer passes Authorization via headers; OpenAI forwards it. No OAuth discovery; any bearer-validating server is compatible."
+    requires: []
+
+  - name: gemini-cli
+    vendor: Google
+    display: "Gemini CLI"
+    requires:
+      - id: oauth-2.1
+        criticality: mandatory
+        rationale: "MCPOAuthProvider.authenticate() runs the full OAuth authorization-code flow with PKCE as a public client"
+        source: "https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/mcp/oauth-provider.ts"
+        rank: primary
+      - id: rfc-7636
+        criticality: mandatory
+        rationale: "generatePKCEParams hashes the code verifier with SHA-256 and sets code_challenge_method: 'S256' explicitly on every flow"
+        source: "https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/oauth-flow.ts"
+        rank: primary
+      - id: rfc-9728
+        criticality: mandatory
+        rationale: "discoverOAuthFromWWWAuthenticate parses the resource_metadata parameter out of the 401 WWW-Authenticate header and fetches the protected-resource document from it"
+        source: "https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/mcp/oauth-utils.ts"
+        rank: primary
+      - id: rfc-8414
+        criticality: mandatory
+        rationale: "discoverAuthorizationServerMetadata probes /.well-known/oauth-authorization-server and /.well-known/openid-configuration; a real-world case (AS without RFC 8414 support) confirms the flow fails outright without it"
+        source: "https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/mcp/oauth-utils.ts"
+        rank: primary
+      - id: rfc-8707
+        criticality: optional
+        rationale: "buildAuthorizationUrl and exchangeCodeForToken both append a resource parameter, but only when the caller supplies one — it degrades gracefully (no error) if absent or if the server ignores it"
+        source: "https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/oauth-flow.ts"
+        rank: primary
+      - any_of: [cimd, sep-837]
+        criticality: optional
+        rationale: "runs Dynamic Client Registration (RFC 7591) as a public client when no clientId is configured, though its registration request does not itself declare application_type — the SEP-837 label is used here as the corpus's known DCR-proxy approximation (see design doc's documented limitation); a pre-registered client also works and no CIMD support was found in the client source, so the 2026-07-28 deprecation of DCR has not yet reached this client"
+        source: "https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/mcp/oauth-provider.ts"
+        rank: secondary
+
+  - name: gemini-enterprise
+    vendor: Google
+    display: "Gemini Enterprise / Vertex"
+    unscorable: true
+    note: "authenticates via Google Cloud IAM (service accounts, API keys, ADC); outside MCP OAuth discovery, so it does not map onto the checks this tool probes."
+    requires: []

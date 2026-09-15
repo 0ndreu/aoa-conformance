@@ -18,6 +18,7 @@ type RegisterInput struct {
 	TokenEndpointAuthMethod string
 	Scope                   string
 	ApplicationType         string // OIDC application_type, e.g. "native" (SEP-837)
+	ClientName              string // RFC 7591 client_name; omit when empty
 	InitialAccessToken      string // optional RFC 7591 §3 bearer
 }
 
@@ -62,6 +63,9 @@ func Register(ctx context.Context, c *http.Client, in RegisterInput) (*RegisterR
 	}
 	if in.ApplicationType != "" {
 		body["application_type"] = in.ApplicationType
+	}
+	if in.ClientName != "" {
+		body["client_name"] = in.ClientName
 	}
 	buf, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, in.RegistrationEndpoint, bytes.NewReader(buf))

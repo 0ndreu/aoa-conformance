@@ -2,3 +2,6 @@ coverage.out
 coverage.html
 /aoa-conform
 /integration/mcpserver/mcpserver
+
+/outreach/*
+!/outreach/verify.sh

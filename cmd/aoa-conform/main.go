@@ -35,6 +35,7 @@ type options struct {
 
 	TokenAuthMethod   string
 	RegistrationToken string
+	ClientName        string // RFC 7591 client_name for DCR (--client-name)
 
 	Model         string // comma-separated client surfaces to score (--model), or "all"
 	CIMDClientURL string // operator-hosted CIMD client-metadata doc URL (--cimd-client-url)
@@ -58,6 +59,7 @@ func main() {
 	flag.BoolVar(&o.Insecure, "insecure-skip-verify", false, "skip TLS certificate verification (dev only)")
 	flag.StringVar(&o.TokenAuthMethod, "token-auth-method", "", "override token-endpoint auth method: none | client_secret_post | client_secret_basic")
 	flag.StringVar(&o.RegistrationToken, "registration-token", "", "RFC 7591 initial access token for dynamic client registration")
+	flag.StringVar(&o.ClientName, "client-name", "", "RFC 7591 client_name for dynamic registration; omitted unless set")
 	flag.StringVar(&o.Model, "model", "", "narrow the agent-compatibility section to these client surfaces (comma-separated names or 'all'); --target scores all of them by default")
 	flag.StringVar(&o.CIMDClientURL, "cimd-client-url", "", "operator-hosted CIMD client-metadata document URL (for --target against a remote AS)")
 	flag.Parse()
@@ -287,6 +289,7 @@ func resolveOptionsFrom(o options) conformance.ResolveOptions {
 		ClientSecret:      o.ClientSecret,
 		TokenAuthMethod:   o.TokenAuthMethod,
 		RegistrationToken: o.RegistrationToken,
+		ClientName:        o.ClientName,
 		Scopes:            splitScopes(o.Scope),
 	}
 }
