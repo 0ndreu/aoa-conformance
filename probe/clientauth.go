@@ -9,19 +9,39 @@ import (
 const (
 	AuthClientSecretPost  = "client_secret_post"
 	AuthClientSecretBasic = "client_secret_basic"
+	// AuthNone is the public-client method (OIDC registration
+	// token_endpoint_auth_method "none"): the client identifies itself with
+	// client_id and holds no secret. Most public MCP servers issue such clients.
+	AuthNone = "none"
 )
+
+// ImplementsClientAuth reports whether a token-endpoint auth method is one this
+// tool can actually perform.
+func ImplementsClientAuth(method string) bool {
+	switch method {
+	case AuthClientSecretPost, AuthClientSecretBasic, AuthNone:
+		return true
+	}
+	return false
+}
 
 // ApplyClientAuth applies a client-authentication method to a token request.
 //
 //   - client_secret_basic: client_id + client_secret go into an
 //     Authorization: Basic header (RFC 6749 §2.3.1); neither is placed in the
 //     body. Returns the header set.
+//   - none: client_id goes into the form body and no client authentication is
+//     sent, even if a secret happens to be held.
 //   - client_secret_post (default): client_id (always) and client_secret (when
 //     present) go into the form body. Returns nil.
 //
 // A non-empty clientID with an empty secret is treated as a public/anonymous
 // client: client_id only, no header.
 func ApplyClientAuth(form url.Values, method, clientID, clientSecret string) http.Header {
+	if method == AuthNone {
+		form.Set("client_id", clientID)
+		return nil
+	}
 	if method == AuthClientSecretBasic && clientSecret != "" {
 		h := http.Header{}
 		cred := base64.StdEncoding.EncodeToString([]byte(clientID + ":" + clientSecret))

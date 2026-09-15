@@ -12,7 +12,7 @@ func registerRFC8414(r *Registry) {
 	mk := func(id, section, desc string, sev Severity, run func(*Target) Result) Check {
 		return Check{ID: CheckID(id), Profile: ProfileCore, RFC: "RFC 8414", Section: section,
 			Severity: sev, Description: desc,
-			Precondition: func(t *Target) bool { return t.Discovered.Issuer != "" },
+			Precondition: needs(resolvedIssuer),
 			Run:          run}
 	}
 
@@ -77,9 +77,20 @@ func registerRFC8414(r *Registry) {
 		Check{
 			ID: "rfc8414.metadata.signed_metadata_valid", Profile: ProfileCore, RFC: "RFC 8414", Section: "§2.1",
 			Severity: SeveritySHOULD, Description: "signed_metadata JWT verifies against the issuer JWKS",
-			Precondition: func(t *Target) bool {
-				return t.Discovered.SignedMetadata != "" && t.Discovered.JWKSURI != ""
-			},
+			Precondition: needs(
+				func(t *Target) SkipReason {
+					if t.Discovered.SignedMetadata == "" {
+						return Unsupported("AS metadata carries no signed_metadata JWT")
+					}
+					return satisfied
+				},
+				func(t *Target) SkipReason {
+					if t.Discovered.JWKSURI == "" {
+						return Unsupported("AS metadata advertises no jwks_uri to verify signed_metadata against")
+					}
+					return satisfied
+				},
+			),
 			Run: func(t *Target) Result {
 				err := probe.VerifyJWTWithJWKS(t.Context(), t.httpClient(), t.Discovered.SignedMetadata, t.Discovered.JWKSURI)
 				if err != nil {

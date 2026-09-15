@@ -3,11 +3,14 @@ package conformance
 func registerRFC9207(r *Registry) {
 	r.Add(Check{
 		ID: "rfc9207.authorize.iss_present", Profile: ProfileCore, RFC: "RFC 9207", Section: "§2",
-		Severity:    SeveritySHOULD,
-		Description: "authorization response carries iss matching the issuer when advertised",
-		Precondition: func(t *Target) bool {
-			return t.Discovered.AuthorizationResponseIssParameterSupported && t.Creds.AuthCodeAvailable
-		},
+		// the precondition below (issParameterAdvertised) already requires the AS
+		// to have declared support; RFC 9207 §2 says that once declared, iss MUST
+		// be present. Unlike sep2468.authorize.iss_present (checks_sep2468.go),
+		// which runs unconditionally and is deliberately softened to SHOULD, this
+		// check only ever runs once the MUST clause is squarely in effect.
+		Severity:     SeverityMUST,
+		Description:  "authorization response carries iss matching the issuer when advertised",
+		Precondition: needs(issParameterAdvertised, authCodeFlow),
 		Run: func(t *Target) Result {
 			iss := t.Hints["authorize_iss"]
 			if iss == "" {

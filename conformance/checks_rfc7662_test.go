@@ -6,13 +6,24 @@ import (
 	"github.com/0ndreu/aoa-conformance/internal/fakeas"
 )
 
+// introspectTarget resolves a confidential client the way a run with
+// --client-id/--client-secret does: through the plan, which is what the checks
+// read.
 func introspectTarget(t *testing.T, v fakeas.Violations) *Target {
 	t.Helper()
 	as := fakeas.NewAS(v)
 	t.Cleanup(as.Close)
-	tgt := discoverInto(t, as.URL)
-	tgt.Creds.ClientID = "test-client"
-	tgt.Creds.ClientSecret = "test-secret"
+	tgt := &Target{Issuer: as.URL}
+	if err := Discover(tgt); err != nil {
+		t.Fatalf("discovery: %v", err)
+	}
+	plan, err := Resolve(tgt.Context(), tgt.httpClient(), tgt.Discovered, ResolveOptions{
+		ClientID: "test-client", ClientSecret: "test-secret",
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	tgt.Plan = plan
 	return tgt
 }
 

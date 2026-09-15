@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	_ "embed"
 	"fmt"
 	"strings"
 
@@ -123,10 +124,43 @@ func validateRequirement(r ModelRequirement, surface string, known map[string]bo
 	return nil
 }
 
+//go:embed model_profiles.yaml
+var defaultProfilesYAML []byte
+
 // reqName renders a requirement's slug identity for messages and terse output.
 func reqName(r ModelRequirement) string {
 	if r.ID != "" {
 		return r.ID
 	}
 	return "any_of[" + strings.Join(r.AnyOf, ",") + "]"
+}
+
+// DefaultProfiles parses the embedded corpus against the labels the default
+// registry emits.
+func DefaultProfiles() (*Profiles, error) {
+	return LoadProfiles(defaultProfilesYAML, KnownLabels(DefaultRegistry()))
+}
+
+// SelectSurfaces resolves a list of surface names (or the single token "all") to
+// surfaces from p. An unknown name is an error that names it and lists the
+// available surfaces.
+func SelectSurfaces(p *Profiles, names []string) ([]ModelSurface, error) {
+	if len(names) == 1 && names[0] == "all" {
+		return p.Surfaces, nil
+	}
+	byName := map[string]ModelSurface{}
+	avail := make([]string, 0, len(p.Surfaces))
+	for _, s := range p.Surfaces {
+		byName[s.Name] = s
+		avail = append(avail, s.Name)
+	}
+	out := make([]ModelSurface, 0, len(names))
+	for _, n := range names {
+		s, ok := byName[n]
+		if !ok {
+			return nil, fmt.Errorf("unknown --model %q; available: %s", n, strings.Join(avail, ", "))
+		}
+		out = append(out, s)
+	}
+	return out, nil
 }

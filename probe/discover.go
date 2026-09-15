@@ -24,6 +24,7 @@ type Discovered struct {
 	GrantTypesSupported              []string
 	CodeChallengeMethodsSupported    []string
 	DPoPSigningAlgValuesSupported    []string
+	PRMResource                      string
 	PRMAuthorizationServers          []string
 	PRMScopesSupported               []string
 	PRMBearerMethodsSupported        []string
@@ -31,6 +32,13 @@ type Discovered struct {
 	WWWAuthenticate                  string
 	RawASMetadata                    []byte
 	RawPRM                           []byte
+
+	// MCPEra / MCPProtocolVersion record what the unauthenticated MCP call
+	// revealed about the endpoint: whether it speaks the per-request-metadata
+	// revision or still wants an initialize handshake.
+	MCPEra               MCPEra
+	MCPProtocolVersion   string
+	MCPSupportedVersions []string
 
 	RegistrationEndpoint               string
 	TokenEndpointAuthMethodsSupported  []string
@@ -44,6 +52,7 @@ type Discovered struct {
 	SignedMetadata                             string
 	TLSClientCertificateBoundAccessTokens      bool
 	MTLSEndpointAliases                        map[string]string
+	ClientIDMetadataDocumentSupported          bool
 }
 
 var resourceMetadataRE = regexp.MustCompile(`resource_metadata="([^"]+)"`)
@@ -55,12 +64,18 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 	issuer := in.Issuer
 
 	if in.MCPURL != "" {
-		// step 1: trigger the 401 and read the resource_metadata pointer.
-		resp, err := Get(ctx, c, in.MCPURL)
+		// step 1: trigger the 401 with a real MCP call and read the
+		// resource_metadata pointer. A bare GET happens to work on some
+		// servers but a conformant 2026-07-28 endpoint answers it 405, and
+		// one that gates on Accept answers 406 — neither carries a challenge.
+		res, err := MCPRequest(ctx, c, MCPInput{Endpoint: in.MCPURL})
 		if err != nil {
 			return nil, err
 		}
-		d.WWWAuthenticate = resp.Header.Get("WWW-Authenticate")
+		d.MCPEra = res.Era
+		d.MCPProtocolVersion = res.Version
+		d.MCPSupportedVersions = res.SupportedVersions
+		d.WWWAuthenticate = res.Header.Get("WWW-Authenticate")
 		prmURL := prmURLFromChallenge(d.WWWAuthenticate)
 		if prmURL == "" {
 			// fall back to the well-known default path on the MCP origin.
@@ -73,12 +88,14 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 		}
 		d.RawPRM = prm.Body
 		var prmDoc struct {
+			Resource                      string   `json:"resource"`
 			AuthorizationServers          []string `json:"authorization_servers"`
 			ScopesSupported               []string `json:"scopes_supported"`
 			BearerMethodsSupported        []string `json:"bearer_methods_supported"`
 			DPoPBoundAccessTokensRequired bool     `json:"dpop_bound_access_tokens_required"`
 		}
 		_ = json.Unmarshal(prm.Body, &prmDoc)
+		d.PRMResource = prmDoc.Resource
 		d.PRMAuthorizationServers = prmDoc.AuthorizationServers
 		d.PRMScopesSupported = prmDoc.ScopesSupported
 		d.PRMBearerMethodsSupported = prmDoc.BearerMethodsSupported
@@ -117,6 +134,7 @@ func Discover(ctx context.Context, c *http.Client, in DiscoverInput) (*Discovere
 	d.SignedMetadata = meta.SignedMetadata
 	d.TLSClientCertificateBoundAccessTokens = meta.TLSClientCertificateBoundAccessTokens
 	d.MTLSEndpointAliases = meta.MTLSEndpointAliases
+	d.ClientIDMetadataDocumentSupported = meta.ClientIDMetadataDocumentSupported
 	return d, nil
 }
 
@@ -141,6 +159,7 @@ type asMetadata struct {
 	SignedMetadata                             string            `json:"signed_metadata"`
 	TLSClientCertificateBoundAccessTokens      bool              `json:"tls_client_certificate_bound_access_tokens"`
 	MTLSEndpointAliases                        map[string]string `json:"mtls_endpoint_aliases"`
+	ClientIDMetadataDocumentSupported          bool              `json:"client_id_metadata_document_supported"`
 }
 
 func fetchASMetadata(ctx context.Context, c *http.Client, issuer string) (asMetadata, []byte, error) {

@@ -22,7 +22,7 @@ func TestSEP2468_AdvertiseFailWhenAbsent(t *testing.T) {
 	tgt := discoverInto(t, as.URL)
 	got := runChecksFor(t, "SEP-2468", tgt)["sep2468.advertise.iss_parameter"]
 	if got.Status != StatusFail {
-		t.Fatalf("iss param absent (RC MUST): want fail, got %s (%s)", got.Status, got.Message)
+		t.Fatalf("iss param absent: want fail, got %s (%s)", got.Status, got.Message)
 	}
 }
 

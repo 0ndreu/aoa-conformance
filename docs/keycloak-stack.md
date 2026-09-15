@@ -142,9 +142,9 @@ go run ../../cmd/aoa-conform --issuer https://localhost:8443/realms/mcp $TLS \
   --client-id mcp-conform --client-secret conform-secret
 ```
 
-Add `--profile rc,core,extended` to include the July-28 RC checks (Keycloak
-advertises the authorization-response `iss` parameter and supports the DCR
-fields these checks probe).
+The 2026-07-28 checks run by default (Keycloak advertises the
+authorization-response `iss` parameter and supports the DCR fields they probe);
+`--profile 2026-07` narrows the run to just those.
 
 ### 3b. Point at the MCP target (walks the full agent loop from the 401 challenge)
 
@@ -159,7 +159,8 @@ indicators → token exchange → DPoP, ending in a capability matrix.
 ### 3c. Unlock the Tier-2 (user-delegated) RFC 8693 checks with `--auth-code`
 
 `client_credentials` (3a/3b) has no user subject to exchange, so the RFC 8693
-checks report ⚪ skip. To exercise the real delegation path, add `--auth-code`.
+checks report ⚪ `not tested`, naming the flag that would unlock them. To exercise
+the real delegation path, add `--auth-code`.
 It runs `authorization_code` + PKCE, opens your browser; log in as **alice / alice**:
 
 ```sh
@@ -175,7 +176,11 @@ self-signed Keycloak. Alternatively, supply a pre-obtained user JWT with
 
 Drop `--client-id` and `--client-secret`. This realm allows anonymous dynamic
 registration, so the tool registers a temporary client, runs the
-client-dependent checks with it, and deletes it when the run ends:
+client-dependent checks with it, and deletes it when the run ends. The request
+asks only for grants the realm advertises in `grant_types_supported`, always sends
+`redirect_uris`, and sets `application_type` from the redirect — `native` for the
+loopback callback (SEP-837). A refused registration is reported as its own named
+`error` entry quoting Keycloak's response, not as a wall of skips:
 
 ```sh
 go run ../../cmd/aoa-conform --issuer https://localhost:8443/realms/mcp $TLS
@@ -184,6 +189,13 @@ go run ../../cmd/aoa-conform --issuer https://localhost:8443/realms/mcp $TLS
 You should see the resource-indicator and DPoP checks run rather than skip. If
 you later lock the realm down to token-gated registration, pass the initial
 access token with `--registration-token <token>`.
+
+A **public client** — a `--client-id` with no `--client-secret` — is also enough
+on its own. When the authorization server advertises `none` in
+`token_endpoint_auth_methods_supported`, the tool sends no client authentication
+at the token endpoint and still runs every check that needs only an identity to
+act as. That is what most third-party MCP authorization servers issue; the
+Keycloak realm here is confidential, so the paired secret is what it expects.
 
 ### 3e. Exercise PAR (RFC 9126)
 
@@ -232,13 +244,13 @@ go run ../../cmd/aoa-conform --target https://localhost:8444/mcp $TLS \
 
 ### Useful flags
 
-- `--profile <list>`: comma-separated list of profiles to run — `core`, `extended`, `rc` (default: `core,extended`)
+- `--profile <list>`: comma-separated list of profiles to run — `core`, `extended`, `2026-07` (default: all three)
 - `--format md|json`: scorecard (default) or machine-readable JSON for CI
-- `--present`: complete the loop by presenting the obtained token to the resource server. The tool presents by the method the PRM advertises in `bearer_methods_supported` (default `header`) and DPoP-binds the token when the PRM sets `dpop_bound_access_tokens_required`. A `403` (authenticated but missing scope) is a failure, not a pass.
+- `--present`: complete the loop by presenting the obtained token to the resource server, on the `Authorization` header, DPoP-bound when the PRM sets `dpop_bound_access_tokens_required`. A `403` (authenticated but missing scope) is a failure, not a pass.
 - `--scope "mcp:read"`: space-separated scopes to request when obtaining a token (override)
 - `--token-auth-method client_secret_post|client_secret_basic`: force the token-endpoint client auth method (default: read from metadata)
 - `--registration-token <token>`: initial access token for dynamic registration, if the realm requires one
-- `--strict`: treat SHOULD-level violations as failures (changes exit code)
+- `--strict`: treat SHOULD-level violations as fatal (changes the exit code; without it only a MUST-level fail or error exits non-zero)
 - `--insecure-skip-verify`: skip TLS verification instead of `--cacert` (dev only)
 
 `mcp:read` is an optional client scope, so a token only carries it when it is
@@ -263,8 +275,15 @@ read scopes from.
   `challenge.resource_metadata`, `prm.fetchable`,
   `prm.authorization_servers_present` (= `https://localhost:8443/realms/mcp`),
   `prm.as_resolvable`. That's the point: the aoa-guarded server is a conformant
-  protected resource.
-- Unauthenticated `GET /mcp` → **401** with two `WWW-Authenticate` challenges
+  protected resource. The zero-credential `mcp.*` checks pass alongside them: the
+  guard answers an unissued token and a foreign-audience token with a 401, the
+  PRM `resource` is the canonical server URI, and `query` is not offered as a
+  bearer method.
+- The capability matrix reports ✅ for PRM discovery, AS metadata, PKCE S256,
+  resource indicators, introspection, revocation and dynamic client registration,
+  ➖ for CIMD and mTLS, and ⚪ for the rows a flag would unlock — refresh-token
+  scope needs `--auth-code`, step-up needs `--auth-code --stepup`.
+- An unauthenticated MCP POST → **401** with two `WWW-Authenticate` challenges
   (Bearer + DPoP, since `dpop: optional`), each carrying `resource_metadata=`.
 
 ### Expected non-bugs (Keycloak behavior, not defects)
@@ -272,21 +291,33 @@ read scopes from.
 #### Conformance checks
 
 The discovery-driven checks resolve cleanly here. Each is pass or skip, never
-error:
+error. Where a skip appears below, ➖ means Keycloak does not offer the capability
+and ⚪ means a credential or flag was not supplied:
 
 - `oauth21.authorize.response_type_code` (SHOULD): **pass**. Keycloak advertises
   `code` in `response_types_supported`.
+- `rfc7009.advertise.revocation_endpoint`: **pass**. Keycloak advertises a
+  `revocation_endpoint`, so revocation reports as supported with no credential at
+  all.
 - `rfc7662.introspect.active` (MAY) and `rfc7009.revoke.honored` (MAY): **pass**
   when you supply `CLIENT_ID`/`CLIENT_SECRET` (Keycloak serves both
-  `introspection_endpoint` and `revocation_endpoint`); **skip** without a client.
-- `rfc9207.authorize.iss_present` (SHOULD): **pass** under `--auth-code` (Keycloak
+  `introspection_endpoint` and `revocation_endpoint`); ⚪ **not tested** without a
+  client.
+- `rfc9207.authorize.iss_present` (MUST): **pass** under `--auth-code` (Keycloak
   sets `authorization_response_iss_parameter_supported` and returns `iss` on the
-  callback); **skip** without `--auth-code`.
-- `rfc8414.metadata.signed_metadata_valid` (SHOULD): **skip**. Keycloak does not
-  emit `signed_metadata`. The fake AS covers the pass/fail behavior.
-- `rfc8705.advertise.mtls_bound` (MAY): **skip** unless the realm advertises
-  `tls_client_certificate_bound_access_tokens`; **pass** when the advertisement is
-  coherent (the bound flag plus `mtls_endpoint_aliases`).
+  callback); ⚪ **not tested** without `--auth-code`. The SEP-2468 pair in the
+  2026-07 profile reads the same evidence at SHOULD, since it runs
+  unconditionally rather than only once the AS has already declared support.
+- `pkce.enforce.reject_plain` (MUST): ⚪ **not tested**, with or without
+  `--auth-code`. A genuine plain-downgrade probe needs a dedicated,
+  never-redeemed authorization code the shared `--auth-code` exchange doesn't
+  provide, so the check always reports its own limitation rather than a real
+  verdict.
+- `rfc8414.metadata.signed_metadata_valid` (SHOULD): ➖ **not supported**. Keycloak
+  does not emit `signed_metadata`. The fake AS covers the pass/fail behavior.
+- `rfc8705.advertise.mtls_bound` (MAY): ➖ **not supported** unless the realm
+  advertises `tls_client_certificate_bound_access_tokens`; **pass** when the
+  advertisement is coherent (the bound flag plus `mtls_endpoint_aliases`).
 
 The env-gated `integration/keycloak_test.go` asserts none of these error and logs
 each one's status.
@@ -317,9 +348,11 @@ longer comes back widened. Because the scope is now optional, the tool requests 
 from the PRM's `scopes_supported` when it needs an accepted token (see
 [Useful flags](#useful-flags)).
 
-A **skip** is never a failure. It means a precondition (an advertised capability
-or a credential you didn't supply) wasn't met. `aoa-conform` exits non-zero only
-on **fail** or **error** (and SHOULD-fails under `--strict`).
+A skip is never a failure, and the report splits it in two: ➖ `not supported`
+means Keycloak does not offer the capability (an answer), ⚪ `not tested` means
+you did not supply a credential or flag (no answer yet, and the message names the
+one that would unlock it). `aoa-conform` exits non-zero only on a MUST-level
+**fail** or **error** — and on SHOULD-level ones under `--strict`.
 
 ---
 

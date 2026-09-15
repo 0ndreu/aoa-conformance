@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+
+	"github.com/0ndreu/aoa-conformance/probe"
 )
 
 // RSViolations toggles resource-server discovery violations.
@@ -15,6 +17,7 @@ type RSViolations struct {
 	MalformedPRM             bool // PRM document is invalid non-JSON
 	UnresolvableAuthServer   bool // PRM lists an authorization server that does not resolve
 	NoSuffixPRM              bool // do not serve the RFC 9728 suffix-inserted PRM path (SEP-2351)
+	NonCanonicalResource     bool // PRM resource carries a fragment instead of the plain canonical URI
 }
 
 // RS is a fake MCP resource server: it emits the 401 + RFC 9728 PRM pointing at
@@ -52,7 +55,13 @@ func (rs *RS) handlePRM(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("not json"))
 		return
 	}
-	doc := map[string]any{"resource": rs.URL}
+	// the canonical resource identifier of an MCP server is the URI clients
+	// call, path included — https://host/mcp, not the bare origin.
+	resource := rs.URL + "/mcp"
+	if rs.v.NonCanonicalResource {
+		resource += "#mcp"
+	}
+	doc := map[string]any{"resource": resource}
 	if !rs.v.OmitAuthorizationServers {
 		as := rs.asURL
 		if rs.v.UnresolvableAuthServer {
@@ -73,24 +82,27 @@ func (rs *RS) handlePRM(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (rs *RS) handleMCP(w http.ResponseWriter, r *http.Request) {
-	if rs.v.AcceptAnyToken && r.Header.Get("Authorization") != "" {
-		writeJSON(w, 200, map[string]any{"ok": true})
+	token, ok := rs.extractToken(r)
+	if !ok {
+		rs.challenge(w, 401)
 		return
 	}
-	if rs.serves() && rs.extractToken(r) {
-		if rs.RequireDPoP && (r.Header.Get("DPoP") == "" || !strings.HasPrefix(r.Header.Get("Authorization"), "DPoP ")) {
-			rs.challenge(w, 401)
-			return
-		}
-		if rs.InsufficientScope {
-			w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
-			w.WriteHeader(403)
-			return
-		}
-		writeJSON(w, 200, map[string]any{"ok": true})
+	// AcceptAnyToken models a resource that never validates what it is handed:
+	// it authenticates a stranger's token exactly like one of its own.
+	if !rs.v.AcceptAnyToken && !(rs.serves() && rs.issuedByOurAS(r, token)) {
+		rs.challenge(w, 401)
 		return
 	}
-	rs.challenge(w, 401)
+	if rs.RequireDPoP && (r.Header.Get("DPoP") == "" || !strings.HasPrefix(r.Header.Get("Authorization"), "DPoP ")) {
+		rs.challenge(w, 401)
+		return
+	}
+	if rs.InsufficientScope {
+		w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
+		w.WriteHeader(403)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
 // serves reports whether this RS is configured to behave like a working
@@ -99,29 +111,51 @@ func (rs *RS) serves() bool {
 	return rs.RequireBearerMethod != "" || len(rs.BearerMethods) > 0 || rs.RequireDPoP || rs.InsufficientScope
 }
 
-// extractToken reports whether a token was presented by the method this RS
-// requires (or by any method when RequireBearerMethod is "").
-func (rs *RS) extractToken(r *http.Request) bool {
-	hasHeader := r.Header.Get("Authorization") != ""
+// extractToken returns the token presented by the method this RS requires (or
+// by any method when RequireBearerMethod is "").
+func (rs *RS) extractToken(r *http.Request) (string, bool) {
+	header := r.Header.Get("Authorization")
+	if i := strings.IndexByte(header, ' '); i >= 0 {
+		header = header[i+1:]
+	}
 	_ = r.ParseForm()
-	hasBody := r.PostForm.Get("access_token") != ""
-	hasQuery := r.URL.Query().Get("access_token") != ""
+	body := r.PostForm.Get("access_token")
+	query := r.URL.Query().Get("access_token")
 	switch rs.RequireBearerMethod {
 	case "header":
-		return hasHeader
+		return header, header != ""
 	case "body":
-		return hasBody
+		return body, body != ""
 	case "query":
-		return hasQuery
+		return query, query != ""
 	default:
-		return hasHeader || hasBody || hasQuery
+		for _, t := range []string{header, body, query} {
+			if t != "" {
+				return t, true
+			}
+		}
+		return "", false
 	}
+}
+
+// issuedByOurAS is the check a real resource server performs and the reason a
+// stranger's token gets a 401: the token must be signed by the authorization
+// server this resource trusts, and must name it as issuer.
+func (rs *RS) issuedByOurAS(r *http.Request, token string) bool {
+	if probe.VerifyJWTWithJWKS(r.Context(), http.DefaultClient, token, rs.asURL+"/jwks") != nil {
+		return false
+	}
+	iss, _ := probe.DecodeJWTPayload(token)["iss"].(string)
+	return iss == rs.asURL
 }
 
 func (rs *RS) challenge(w http.ResponseWriter, code int) {
 	if !rs.v.OmitChallenge {
-		w.Header().Set("WWW-Authenticate",
-			fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource"`, rs.URL))
+		challenge := fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource"`, rs.URL)
+		if len(rs.Scopes) > 0 {
+			challenge += fmt.Sprintf(`, scope="%s"`, strings.Join(rs.Scopes, " "))
+		}
+		w.Header().Set("WWW-Authenticate", challenge)
 	}
 	w.WriteHeader(code)
 }

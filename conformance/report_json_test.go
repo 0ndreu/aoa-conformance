@@ -67,3 +67,44 @@ func TestJSONReporter_ModelCompat(t *testing.T) {
 		t.Fatalf("model_compatibility should be omitted when empty:\n%s", b2.String())
 	}
 }
+
+// TestJSONReporter_Capabilities: the support matrix must survive the round
+// trip, since a CI consumer reads it instead of the markdown.
+func TestJSONReporter_Capabilities(t *testing.T) {
+	rep := sampleReport()
+	rep.Capabilities = Capabilities(rep.Entries)
+	var b bytes.Buffer
+	if err := (JSONReporter{}).Write(&b, rep); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		SchemaVersion string       `json:"schema_version"`
+		Capabilities  []Capability `json:"capabilities"`
+	}
+	if err := json.Unmarshal(b.Bytes(), &got); err != nil {
+		t.Fatalf("not valid json: %v", err)
+	}
+	if got.SchemaVersion != "2" {
+		t.Errorf("capabilities is a schema addition; want version 2, got %q", got.SchemaVersion)
+	}
+	if len(got.Capabilities) != len(capabilitySpecs) {
+		t.Fatalf("want %d capability rows, got %d", len(capabilitySpecs), len(got.Capabilities))
+	}
+	for _, c := range got.Capabilities {
+		switch c.State {
+		case CapSupported, CapNotSupported, CapNotTested:
+		default:
+			t.Errorf("capability %q has state %q outside the three-valued vocabulary", c.Key, c.State)
+		}
+		if c.Reason == "" {
+			t.Errorf("capability %q has no reason; an unexplained row is the bug this replaces", c.Key)
+		}
+	}
+
+	// omitempty: absent when the report carries no matrix
+	var b2 strings.Builder
+	_ = (JSONReporter{}).Write(&b2, Report{Target: "x"})
+	if strings.Contains(b2.String(), `"capabilities"`) {
+		t.Errorf("capabilities should be omitted when empty:\n%s", b2.String())
+	}
+}

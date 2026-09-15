@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -186,3 +187,67 @@ func TestDiscover_PhaseCMetadataFields(t *testing.T) {
 
 // issuerOf reconstructs the test server's base URL from the request.
 func issuerOf(r *http.Request) string { return "http://" + r.Host }
+
+func TestDiscoverParsesCIMDFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/.well-known/oauth-authorization-server") {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"issuer":%q,"token_endpoint":%q,"client_id_metadata_document_supported":true}`,
+				"http://"+r.Host, "http://"+r.Host+"/token")
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer srv.Close()
+
+	d, err := Discover(context.Background(), srv.Client(), DiscoverInput{Issuer: srv.URL})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if !d.ClientIDMetadataDocumentSupported {
+		t.Fatal("expected ClientIDMetadataDocumentSupported=true")
+	}
+}
+
+// TestDiscoverFallsBackToOriginWellKnownWithoutChallenge covers the server that
+// answers 401 with no resource_metadata pointer at all. RFC 9728 still puts the
+// PRM at the well-known path on the resource's origin, so discovery must keep
+// going rather than give up on the missing challenge — and it must look at the
+// origin, not at the /mcp sub-path.
+func TestDiscoverFallsBackToOriginWellKnownWithoutChallenge(t *testing.T) {
+	var as, rs *httptest.Server
+	as = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/oauth-authorization-server" {
+			fmt.Fprintf(w, `{"issuer":%q,"token_endpoint":%q}`, as.URL, as.URL+"/token")
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer as.Close()
+
+	var prmPath string
+	rs = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/.well-known/") {
+			prmPath = r.URL.Path
+			fmt.Fprintf(w, `{"resource":%q,"authorization_servers":[%q]}`, rs.URL+"/mcp", as.URL)
+			return
+		}
+		// 401 with no WWW-Authenticate: the pointer is simply absent.
+		w.WriteHeader(401)
+	}))
+	defer rs.Close()
+
+	d, err := Discover(context.Background(), http.DefaultClient, DiscoverInput{MCPURL: rs.URL + "/mcp/v1"})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if prmPath != "/.well-known/oauth-protected-resource" {
+		t.Fatalf("PRM fetched from %q, want the origin well-known path", prmPath)
+	}
+	if d.PRMResource != rs.URL+"/mcp" {
+		t.Fatalf("PRM resource = %q", d.PRMResource)
+	}
+	if d.Issuer != as.URL {
+		t.Fatalf("issuer = %q, want %q", d.Issuer, as.URL)
+	}
+}

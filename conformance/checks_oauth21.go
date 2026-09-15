@@ -8,7 +8,7 @@ func registerOAuth21(r *Registry) {
 	mk := func(id, section, desc string, run func(*Target) Result) Check {
 		return Check{ID: CheckID(id), Profile: ProfileCore, RFC: "OAuth 2.1", Section: section,
 			Severity: SeverityMUST, Description: desc,
-			Precondition: func(t *Target) bool { return t.Discovered.TokenEndpoint != "" },
+			Precondition: needs(tokenEndpoint),
 			Run:          run}
 	}
 
@@ -55,7 +55,12 @@ func registerOAuth21(r *Registry) {
 		Check{
 			ID: "oauth21.authorize.response_type_code", Profile: ProfileCore, RFC: "OAuth 2.1", Section: "RFC 8414 §2",
 			Severity: SeveritySHOULD, Description: "response_types_supported includes \"code\"",
-			Precondition: func(t *Target) bool { return len(t.Discovered.ResponseTypesSupported) > 0 },
+			Precondition: needs(func(t *Target) SkipReason {
+				if len(t.Discovered.ResponseTypesSupported) == 0 {
+					return Unsupported("AS metadata advertises no response_types_supported")
+				}
+				return satisfied
+			}),
 			Run: func(t *Target) Result {
 				for _, rt := range t.Discovered.ResponseTypesSupported {
 					if rt == "code" {

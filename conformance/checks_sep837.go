@@ -2,12 +2,10 @@ package conformance
 
 func registerSEP837(r *Registry) {
 	r.Add(Check{
-		ID: "sep837.register.application_type", Profile: ProfileJuly28RC, RFC: "SEP-837", Section: "DCR",
-		Severity:    SeveritySHOULD,
-		Description: "DCR accepts and echoes the OIDC application_type the tool declares (native)",
-		Precondition: func(t *Target) bool {
-			return t.Discovered.RegistrationEndpoint != "" && t.Plan.Registered
-		},
+		ID: "sep837.register.application_type", Profile: Profile2026_07, RFC: "SEP-837", Section: "DCR",
+		Severity:     SeverityMUST,
+		Description:  "DCR accepts and echoes the OIDC application_type the tool declares (native)",
+		Precondition: needs(registrationEndpoint, registeredClient),
 		Run: func(t *Target) Result {
 			switch t.Plan.RegisteredApplicationType {
 			case "native":

@@ -28,8 +28,10 @@ func VerifyPKCE(verifier, challenge string) bool {
 
 // AuthCodeResult is the outcome of the interactive flow.
 type AuthCodeResult struct {
-	AccessToken string
-	CallbackISS string // RFC 9207 iss from the authorization response, if present
+	AccessToken  string
+	RefreshToken string // captured for SEP-2207 / SEP-2350 deep-flow probes
+	GrantedScope string // the scope the token endpoint reported granting
+	CallbackISS  string // RFC 9207 iss from the authorization response, if present
 }
 
 // AuthCodeConfig configures the interactive flow.
@@ -44,6 +46,13 @@ type AuthCodeConfig struct {
 
 	UsePAR      bool
 	PAREndpoint string
+
+	// Resource is the RFC 8707 resource indicator: the canonical URI of the
+	// MCP server the token is for. MCP requires a client to send it on every
+	// authorization and token request, and it is what lets the AS bind the
+	// token's audience. Empty means send nothing (--issuer mode, where there
+	// is no resource server in the picture).
+	Resource string
 
 	// Listener, when set, is the pre-bound loopback callback listener. Callers
 	// bind it before resolution so the redirect_uri can be registered via DCR
@@ -97,6 +106,9 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (AuthCodeResult, error
 		if cfg.ClientSecret != "" {
 			parForm.Set("client_secret", cfg.ClientSecret)
 		}
+		if cfg.Resource != "" {
+			parForm.Set("resource", cfg.Resource)
+		}
 		resp, err := PostForm(ctx, httpClientOrDefault(cfg.HTTPClient), cfg.PAREndpoint, parForm, nil)
 		if err != nil {
 			return AuthCodeResult{}, fmt.Errorf("PAR push failed: %w", err)
@@ -112,9 +124,14 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (AuthCodeResult, error
 			cfg.AuthorizationEndpoint, url.QueryEscape(cfg.ClientID), url.QueryEscape(requestURI),
 			url.QueryEscape(redirectURI), url.QueryEscape(state))
 	} else {
-		authURL = oc.AuthCodeURL(state,
+		params := []oauth2.AuthCodeOption{
 			oauth2.SetAuthURLParam("code_challenge", challenge),
-			oauth2.SetAuthURLParam("code_challenge_method", "S256"))
+			oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+		}
+		if cfg.Resource != "" {
+			params = append(params, oauth2.SetAuthURLParam("resource", cfg.Resource))
+		}
+		authURL = oc.AuthCodeURL(state, params...)
 	}
 
 	codeCh := make(chan string, 1)
@@ -166,6 +183,9 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (AuthCodeResult, error
 	if cfg.ClientSecret != "" {
 		form.Set("client_secret", cfg.ClientSecret)
 	}
+	if cfg.Resource != "" {
+		form.Set("resource", cfg.Resource)
+	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
 		httpClient = http.DefaultClient
@@ -178,7 +198,9 @@ func RunAuthCode(ctx context.Context, cfg AuthCodeConfig) (AuthCodeResult, error
 	if at == "" {
 		return AuthCodeResult{}, fmt.Errorf("token endpoint returned no access_token (HTTP %d)", resp.StatusCode)
 	}
-	return AuthCodeResult{AccessToken: at, CallbackISS: callbackISS}, nil
+	rt, _ := resp.JSON()["refresh_token"].(string)
+	sc, _ := resp.JSON()["scope"].(string)
+	return AuthCodeResult{AccessToken: at, RefreshToken: rt, GrantedScope: sc, CallbackISS: callbackISS}, nil
 }
 
 func httpClientOrDefault(c *http.Client) *http.Client {

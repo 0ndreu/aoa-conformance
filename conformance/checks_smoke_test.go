@@ -64,7 +64,7 @@ func TestSmoke_403InsufficientScopeFails(t *testing.T) {
 
 	tgt := &Target{MCPURL: rs.URL + "/mcp"}
 	(&Runner{Registry: DefaultRegistry()}).Run(tgt)
-	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost, BearerMethod: "header"}
+	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost}
 	tgt.Creds.PresentEnabled = true
 
 	if got := runChecksFor(t, "MCP loop", tgt)["smoke.present.token_accepted"]; got.Status != StatusFail {
@@ -72,21 +72,28 @@ func TestSmoke_403InsufficientScopeFails(t *testing.T) {
 	}
 }
 
-func TestSmoke_PresentsByAdvertisedBodyMethod(t *testing.T) {
+// the shape Semrush deploys: PRM advertises "body" while the server reads only
+// the Authorization header. The smoke check must still get its answer — the
+// token is fine — and the advertisement is a finding of its own.
+func TestSmoke_PresentsOverHeaderWhenPRMAdvertisesBodyOnly(t *testing.T) {
 	as := fakeas.NewAS(fakeas.Violations{})
 	defer as.Close()
 	rs := fakeas.NewRS(as.URL, fakeas.RSViolations{})
 	rs.BearerMethods = []string{"body"}
-	rs.RequireBearerMethod = "body"
+	rs.RequireBearerMethod = "header"
 	defer rs.Close()
 
 	tgt := &Target{MCPURL: rs.URL + "/mcp"}
 	(&Runner{Registry: DefaultRegistry()}).Run(tgt)
-	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost, BearerMethod: tgt.Discovered.PRMBearerMethodsSupported[0]}
+	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost}
 	tgt.Creds.PresentEnabled = true
 
 	if got := runChecksFor(t, "MCP loop", tgt)["smoke.present.token_accepted"]; got.Status != StatusPass {
-		t.Fatalf("body presentation should pass, got %s (%s)", got.Status, got.Message)
+		t.Fatalf("header presentation should pass, got %s (%s)", got.Status, got.Message)
+	}
+	got := runChecksFor(t, "MCP Authorization", tgt)["mcp.token.header_method_advertised"]
+	if got.Status != StatusFail {
+		t.Fatalf("PRM omitting header: want fail, got %s (%s)", got.Status, got.Message)
 	}
 }
 
@@ -99,7 +106,7 @@ func TestSmoke_DPoPRequiredPresentation(t *testing.T) {
 
 	tgt := &Target{MCPURL: rs.URL + "/mcp"}
 	(&Runner{Registry: DefaultRegistry()}).Run(tgt)
-	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost, BearerMethod: "header", DPoPRequired: true}
+	tgt.Plan = AuthPlan{ClientID: "test-client", ClientSecret: "test-secret", TokenAuthMethod: probe.AuthClientSecretPost, DPoPRequired: true}
 	tgt.Creds.PresentEnabled = true
 
 	if got := runChecksFor(t, "MCP loop", tgt)["smoke.present.token_accepted"]; got.Status != StatusPass {

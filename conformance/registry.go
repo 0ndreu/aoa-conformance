@@ -44,9 +44,11 @@ func DefaultRegistry() *Registry {
 	registerSEP2351(r)
 	registerSEP2468(r)
 	registerSEP837(r)
+	registerCIMD(r)
 	registerSEP2352(r)
 	registerSEP2207(r)
 	registerSEP2350(r)
+	registerMCPServer(r)
 	registerSmoke(r)
 	return r
 }
